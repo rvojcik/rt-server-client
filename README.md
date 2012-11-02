@@ -25,11 +25,12 @@ It discover system, import or update infromation into racktables database
 Requirements
 ------------
 
+  Required
     - Python > 2.5.x (tested with 2.5.2, 2.7.3)
     - Python module Beautiful Soup (tested with bs3)
     - lsb-release (detection of Linux distribution and release)
 
-    Optional
+  Optional
     - smbios-utils (HW Vendor, Server model and Service-Tag)
      - if you don't use smbios-utils, script generate random servicetag in /etc
     - LLDPd (information about interface connection with switches and other devices)
@@ -40,16 +41,16 @@ Installation
 
 You should install this application whare you want. I reccommend put it to /opt.
 
-   cd /opt/
-   git clone https://github.com/rvojcik/rt-server-client.git
-   vim rt-server-client/conf/main.conf
-   cd rt-server-client
-   ./system-info.py
+    cd /opt/
+    git clone https://github.com/rvojcik/rt-server-client.git
+    vim rt-server-client/conf/main.conf
+    cd rt-server-client
+    ./system-info.py
 
 If it ends without any message, it was successful. Look into RackTables web interface for new object.
 
 Add to root crontab following line for run script every 30 minutes
-  */30 * * * * cd /opt/rt-server-client ; ./system-info.py
+   */30 * * * * cd /opt/rt-server-client ; ./system-info.py
 
 Normaly script ends without any output. If something go wrong it returns some output of the error. 
 
