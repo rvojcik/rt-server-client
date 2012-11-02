@@ -34,7 +34,26 @@ Requirements
      - if you don't use smbios-utils, script generate random servicetag in /etc
     - LLDPd (information about interface connection with switches and other devices)
     - Dell OMSA (for information about iDRAC configuration)
-    
+
+Installation
+------------
+
+You should install this application whare you want. I reccommend put it to /opt.
+
+   cd /opt/
+   git clone https://github.com/rvojcik/rt-server-client.git
+   vim rt-server-client/conf/main.conf
+   cd rt-server-client
+   ./system-info.py
+
+If it ends without any message, it was successful. Look into RackTables web interface for new object.
+
+Add to root crontab following line for run script every 30 minutes
+  */30 * * * * cd /opt/rt-server-client ; ./system-info.py
+
+Normaly script ends without any output. If something go wrong it returns some output of the error. 
+
+
 License
 -------
 
