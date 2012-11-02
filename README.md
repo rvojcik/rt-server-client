@@ -7,7 +7,8 @@ Description
 This is server discovery script for Racktables project.
 It discover system, import or update infromation into racktables database
  
- Script support following infromation
+Script support following infromation
+
     * hostname
     * service tag
     * supermicro exeption for service tag (same service tag and express servicetag for all machines)
@@ -25,12 +26,14 @@ It discover system, import or update infromation into racktables database
 Requirements
 ------------
 
-  Required
+Required
+
     - Python > 2.5.x (tested with 2.5.2, 2.7.3)
     - Python module Beautiful Soup (tested with bs3)
     - lsb-release (detection of Linux distribution and release)
 
-  Optional
+Optional
+
     - smbios-utils (HW Vendor, Server model and Service-Tag)
      - if you don't use smbios-utils, script generate random servicetag in /etc
     - LLDPd (information about interface connection with switches and other devices)
