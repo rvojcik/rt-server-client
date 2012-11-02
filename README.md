@@ -23,6 +23,8 @@ Script support following infromation
     * Link Virtual server with hypervisor as container in Racktables
     * Racktables logging - when change ip addresses or virtual link with hypervisor
 
+For some description, screenshots and examples visit https://www.cypherpunk.cz/automatic-server-audit-for-racktables-project/
+
 Requirements
 ------------
 
