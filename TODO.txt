@@ -1,0 +1,7 @@
+rt-server-client TODO list
+--------------------------
+
+- optimize code - working with database
+- check behavior with cisco switches
+- add support for other virtualization technologies (openvz, kvm, vmware)
+
