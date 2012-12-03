@@ -47,16 +47,25 @@ import time
 import datetime
 import re
 import random
+import shutil
 
+# Get script path
+script_path = os.path.dirname(sys.argv[0])
 
 # Add local module path
-sys.path.append('lib/')
+sys.path.append(script_path + '/lib/')
 
 import ipaddr
 import MySQLdb
 from ToolBox import net, dell
 
-config_path = "conf/"
+config_path = script_path + "/conf/"
+motd_file_original = "/etc/motd.ls.orig"
+motd_file = "/etc/motd"
+
+# Sleep for some seconds. When running on 200 hosts in same second, local dns should have a problem with it
+time.sleep(random.randint(1,12))
+
 
 try:
     config_file = open(config_path + "main.conf")	
@@ -67,17 +76,6 @@ except IOError ,e:
 # Parsing config options
 config = ConfigParser()
 config.readfp(config_file)
-
-# Create connection to database
-try:
-    # Create connection to database
-    db = MySQLdb.connect(host=config.get('mysqldb','host'),port=3306, passwd=config.get('mysqldb','password'),db=config.get('mysqldb','db'),user=config.get('mysqldb','user'))
-except MySQLdb.Error ,e:
-    print "Error %d: %s" % (e.args[0],e.args[1])
-    sys.exit(1)
-#set cursor for db
-dbresult = db.cursor()
-
 
 def GenerateServiceTag(size):
     """Service tag generator"""
@@ -146,7 +144,7 @@ if server_type_id == 4:
 
 	if vendor == "Supermicro":
 	# There is no way to get uniq identificator of supermicro servers, we must generate some
-		stag_path = '/etc/service_tag_generated.txt'
+		stag_path = '/var/opt/service_tag_generated.txt'
 
 		if os.path.isfile(stag_path):
 		    try:
@@ -633,6 +631,18 @@ def LinkVirtualHypervisor(object_id,virtual_id):
 
 ## Main Database part
 
+# Create connection to database
+try:
+    # Create connection to database
+    db = MySQLdb.connect(host=config.get('mysqldb','host'),port=3306, passwd=config.get('mysqldb','password'),db=config.get('mysqldb','db'),user=config.get('mysqldb','user'))
+except MySQLdb.Error ,e:
+    print "Error %d: %s" % (e.args[0],e.args[1])
+    sys.exit(1)
+#set cursor for db
+dbresult = db.cursor()
+
+
+
 dbresult.execute('SELECT name FROM Object WHERE asset_no = \''+service_tag+'\'')
 
 if dbresult.fetchone() == None:
@@ -723,7 +733,7 @@ else:
     #check if hostname is the same
     dbresult.execute('SELECT NAME FROM Object WHERE name = \''+hostname+'\'')
     if dbresult.fetchone() != None:
-	# hostname not exist = insert new server Object
+	# hostname exist and service tag is same, update info
 	sql = "SELECT id FROM Object WHERE name = '%s' AND asset_no = '%s'" % (hostname,service_tag)
 	dbresult.execute(sql)
 	result = dbresult.fetchone()
@@ -797,6 +807,24 @@ else:
 		CleanIPv6Addresses(object_id,interfaces_ips6[device_list.index(device)],device)
 		for ip in interfaces_ips6[device_list.index(device)]:
 		    InterfaceAddIpv6IP(object_id,device,ip)
+
+	# Update motd from comment
+	sql = "SELECT comment FROM Object WHERE id = %d" % (object_id)
+	dbresult.execute(sql)
+	result = dbresult.fetchone()
+    
+    	comment = ""
+	if result[0] != None:
+	    comment = result[0]
+	    # copy template to motd, if no exist make tamplate from motd
+	    try:
+	    	shutil.copy2(motd_file_original, motd_file)
+	    except IOError :
+		shutil.copy2(motd_file,motd_file_original)
+	    
+	    motd_open_file = open(motd_file, "a")
+	    motd_open_file.write("\n\033[34m--- comment ---\033[33m\n\n" + comment + "\033[0m\n\n")
+	    motd_open_file.close()
 
     else:
 	#Hostname is different
