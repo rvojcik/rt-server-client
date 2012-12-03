@@ -10,6 +10,8 @@ It discover system, import or update infromation into racktables database
 Script support following infromation
 
     * hostname
+    * transfer comment field to server motd (message of the day)
+    * commend-edit utility for editing comments on racktables directly from server
     * service tag
     * supermicro exeption for service tag (same service tag and express servicetag for all machines)
     * for Dell servers it retrieve support type and support expiration date
