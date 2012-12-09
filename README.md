@@ -13,19 +13,25 @@ Script support following infromation
     * transfer comment field to server motd (message of the day)
     * commend-edit utility for editing comments on racktables directly from server
     * service tag
-    * supermicro exeption for service tag (same service tag and express servicetag for all machines)
-    * for Dell servers it retrieve support type and support expiration date
+    * supermicro exeption for service tag (my supermicro servers has all same ST and Expres ST. I don't know why)
+    * for Dell servers: get warranty and support information from Dell website based on server ST.
     * Physical and logical interfaces (eth,bond,bridges)
     * IPv4 and IPv6 IP addresses, import and update in database
-    * Dell Drack IP address (require Dell-OMSA Installed)
+    * Dell iDrac IP address (require Dell-OMSA Installed)
     * OS Dristribution and Release information
     * HW vendor and product type
     * Hypervisor recognition (Xen 4.x)
     * Virtual server recognition (Xen 4.x)
     * Link Virtual server with hypervisor as container in Racktables
     * Racktables logging - when change ip addresses or virtual link with hypervisor
+    * Interface Connection (LLDPD needed for this feature. System automaticly link server interfaces with switch ports in RackTables)
 
 For some description, screenshots and examples visit https://www.cypherpunk.cz/automatic-server-audit-for-racktables-project/
+
+TODO
+----
+    * support for other virtualization technology (OpenVZ, KVM, VirtualBox)
+    * support for windows servers
 
 Requirements
 ------------
