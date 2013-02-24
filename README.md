@@ -15,13 +15,15 @@ Script support following infromation
     * service tag
     * supermicro exeption for service tag (my supermicro servers has all same ST and Expres ST. I don't know why)
     * for Dell servers: get warranty and support information from Dell website based on server ST.
-    * Physical and logical interfaces (eth,bond,bridges)
+    * Physical and logical interfaces (eth,bond,bridges,venet and veth)
     * IPv4 and IPv6 IP addresses, import and update in database
     * Dell iDrac IP address (require Dell-OMSA Installed)
     * OS Dristribution and Release information
     * HW vendor and product type
     * Hypervisor recognition (Xen 4.x)
+    * Hypervisor recognition (OpenVZ)
     * Virtual server recognition (Xen 4.x)
+    * Virtual server recognition (OpenVZ)
     * Link Virtual server with hypervisor as container in Racktables
     * Racktables logging - when change ip addresses or virtual link with hypervisor
     * Interface Connection (LLDPD needed for this feature. System automaticly link server interfaces with switch ports in RackTables)
@@ -30,7 +32,7 @@ For some description, screenshots and examples visit https://www.cypherpunk.cz/a
 
 TODO
 ----
-    * support for other virtualization technology (OpenVZ, KVM, VirtualBox)
+    * support for other virtualization technology (KVM, VirtualBox)
     * support for windows servers
 
 Requirements

@@ -91,15 +91,25 @@ def GenerateServiceTag(size):
 
     return service_tag
 
-def GetVirtualServers():
+def GetVirtualServers(virtualization):
     """Create list of virtual servers"""
 
-    output = commands.getoutput('xm list')
-    virtuals = [] 
+    if virtualization == 'xen':
+        output = commands.getoutput('xm list')
+        virtuals = [] 
 
-    for line in output.splitlines()[2:]:
-	virtual = line.split()[0]
-	virtuals.append(virtual)	
+        for line in output.splitlines()[2:]:
+	    virtual = line.split()[0]
+	    virtuals.append(virtual)	
+
+    if virtualization == 'vz':
+        output = commands.getoutput('vzlist')
+        virtuals = [] 
+
+        for line in output.splitlines()[1:]:
+	    virtual = line.split()[4]
+	    virtuals.append(virtual)	
+   
 
     return virtuals
 	
@@ -116,20 +126,31 @@ interfaces_ips = []
 interfaces_ips6 = []
 
 # Check for virtualization 
-if not os.path.isdir('/proc/xen'):
-    #Je to server
-    server_type_id = 4
-    hypervisor = "no"
-else:
+
+# Default it's not hypervisor and no virtualization
+hypervisor = "no"
+server_type_id = 4
+
+# XEN
+if os.path.isdir('/proc/xen'):
     if not os.path.isfile('/proc/xen/xenbus'):
-	#Je to virtual
-	server_type_id = 1504
-	hypervisor = "no"
+        #It is xen virtual server
+        hypervisor = "no"
+        server_type_id = 1504
     else:
-	#Je to hypervisor
-	server_type_id = 4
-	hypervisor = "yes"
-	virtual_servers = GetVirtualServers()
+	hypervisor = "yes" 
+	virtual_servers = GetVirtualServers('xen')
+    
+# OpenVZ
+if os.path.isdir('/proc/vz'):
+    #It is OpenVZ technology
+    if os.path.isfile('/proc/vz/veinfo'):
+        #It is OpenVZ Hypervisor
+        hypervisor = "yes"
+	virtual_servers = GetVirtualServers('vz')
+    else:
+	hypervisor = "no"
+	server_type_id = 1504
 
 product_name = ''
 service_tag = ''
