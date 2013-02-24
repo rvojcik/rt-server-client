@@ -77,6 +77,9 @@ except IOError ,e:
 config = ConfigParser()
 config.readfp(config_file)
 
+# Close config
+config_file.close()
+
 def GenerateServiceTag(size):
     """Service tag generator"""
 
@@ -208,6 +211,21 @@ if output[0] == 0:
 else:
     drac_ip = ''
 
+# Get label from Drac (display)
+
+output = commands.getstatusoutput('omreport chassis frontpanel')
+
+if output[0] == 0:
+    try:
+	line = re.findall('LCD Line 1.*',output[1])[0]
+	label = line.split(' ')[4]
+    	update_label = "yes"
+    except:
+    	update_label = "no"
+	label = ""
+else:
+    update_label = "no"
+    label = ""
 
 # Get support and waranty for service tag
 if service_tag == '':
@@ -225,9 +243,6 @@ else:
 hostname = platform.node()
 # Get Kernel version
 kernel_version = platform.release()
-
-# Close config
-config_file.close()
 
 # Workaround for VPS and servicetag
 if server_type_id == 1504:
@@ -371,7 +386,7 @@ def GetObjectName(object_id):
     else:
 	object_name = None
 
-    return object_id
+    return object_name
 
 def GetObjectId(name):
     """Find object id in database"""
@@ -652,7 +667,7 @@ if dbresult.fetchone() == None:
     dbresult.execute('select name from Object where name = \''+hostname+'\'')
     if dbresult.fetchone() == None:
 	# hostname not exist = insert new server Object
-	sql = "INSERT INTO Object (name,objtype_id,asset_no,label) VALUES ('%s',%d,'%s','%s')" % (hostname,server_type_id,service_tag,hostname)
+	sql = "INSERT INTO Object (name,objtype_id,asset_no,label) VALUES ('%s',%d,'%s','%s')" % (hostname,server_type_id,service_tag,label)
 	dbresult.execute(sql)
 	db.commit()
 	object_id = dbresult.lastrowid
@@ -734,14 +749,25 @@ else:
     dbresult.execute('SELECT NAME FROM Object WHERE name = \''+hostname+'\'')
     if dbresult.fetchone() != None:
 	# hostname exist and service tag is same, update info
-	sql = "SELECT id FROM Object WHERE name = '%s' AND asset_no = '%s'" % (hostname,service_tag)
+	sql = "SELECT id,label FROM Object WHERE name = '%s' AND asset_no = '%s'" % (hostname,service_tag)
 	dbresult.execute(sql)
 	result = dbresult.fetchone()
 
 	if result != None:
 	    object_id = result[0]
+	    object_label = result[1]
 	else:
 	    sys.exit(1)
+
+	#Update label if it's not same
+	if update_label == "yes":
+	    if label != object_label:
+		sql = "UPDATE Object SET label = '%s' where id = %d" % (label, object_id)
+		dbresult.execute(sql)
+		db.commit()
+		logstring = "Label changed %s -> %s" % (object_label,label)
+		InsertLog(object_id,logstring)
+
 
 	# Insert attributes, OS info and waranty
 	#get id of OS
