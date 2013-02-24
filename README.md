@@ -69,6 +69,24 @@ Add to root crontab following line for run script every 30 minutes
 
 Normaly script ends without any output. If something go wrong it returns some output of the error. 
 
+Issues
+------
+
+Known problem is with Python Beautiful Soup module. 
+You should install it from source or from packages. 
+Name of module depends on version, inux distribution etc.
+
+If you see someting like this:
+    Traceback (most recent call last):
+      File "./system-info.py", line 60, in <module>
+        from ToolBox import net, dell
+      File "./lib/ToolBox/dell/__init__.py", line 22, in <module>
+        import bs3
+    ImportError: No module named bs3
+
+Edit please lib/ToolBox/dell/__init__.py and change "import bs3" to correct name of BeautifulSoup
+module (eg. bs4, BeautifulSoup ... )
+
 
 License
 -------
