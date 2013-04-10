@@ -158,32 +158,41 @@ vendor = ''
 if server_type_id == 4:
     # Get service tag
     # Server type, model
-    for line in commands.getoutput('getSystemId 2>/dev/null').split('\n'):
-	if line.find('Product Name:') > -1:
-	    product_name = " ".join(str(x) for x in line.split()[2:])
-	elif line.find('Service Tag:') > -1:
-	    service_tag = line.split()[2]
-	elif line.find('Vendor:') > -1:
-	    vendor = line.split()[1]
+    getsystemid = commands.getoutput('getSystemId 2>/dev/null')
 
-	if vendor == "Supermicro":
-	# There is no way to get uniq identificator of supermicro servers, we must generate some
-		stag_path = '/var/opt/service_tag_generated.txt'
+    if re.findall('\nProduct Name:.*',getsystemid):
+        product_name = " ".join(str(x) for x in re.findall('\nProduct Name:.*',getsystemid)[0].split()[2:])
+    else:
+        product_name = "unknown"
 
-		if os.path.isfile(stag_path):
-		    try:
-			stag_file = open(stag_path)
-		    except IOError ,e:
-			print("({})".format(e))
-			sys.exit()
-		    
-		    service_tag = stag_file.read()
-		else:
-		    service_tag = GenerateServiceTag(10)
+    if re.findall('\nService Tag:.*',getsystemid):
+        service_tag = re.findall('\nService Tag:.*',getsystemid)[0].split()[2]
+    else:
+        service_tag = "unknown"
 
-		    stag_file = open(stag_path, 'w')
-		    stag_file.write(service_tag)
-		    stag_file.close()
+    if re.findall('\nVendor:.*',getsystemid):
+        vendor = re.findall('\nVendor:.*',getsystemid)[0].split()[1]
+    else:
+        vendor = "unknown"
+
+    if ( vendor == "Supermicro" or vendor == "unknown" ):
+    # There is no way to get uniq identificator of supermicro servers, we must generate some
+        stag_path = '/var/opt/service_tag_generated.txt'
+
+        if os.path.isfile(stag_path):
+       	    try:
+                stag_file = open(stag_path)
+            except IOError ,e:
+       	        print("({})".format(e))
+       	        sys.exit()
+       	 
+	    service_tag = stag_file.read()
+        else:
+	    service_tag = GenerateServiceTag(10)
+
+	    stag_file = open(stag_path, 'w')
+	    stag_file.write(service_tag)
+	    stag_file.close()
 
 for interface in device_list:
     # Default values
