@@ -35,7 +35,7 @@ default_editor = "vim"
 tmp_file = '/tmp/comment-edit'
 
 try:
-    config_file = open(config_path + "main.conf")	
+    config_file = open(config_path + "main.conf")
 except IOError ,e:
     print("({})".format(e))
     sys.exit()
@@ -54,7 +54,7 @@ except MySQLdb.Error ,e:
     sys.exit(1)
 #set cursor for db
 dbresult = db.cursor()
-	
+
 #Open new comment_file
 comment_file = open(tmp_file,'w')
 

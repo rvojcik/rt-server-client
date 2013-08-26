@@ -24,29 +24,29 @@ import bs3
 def get_waranty_info(service_tag):
     dell_support_url = "http://www.dell.com/support/troubleshooting/us/en/04/Servicetag/"
     try:
-	soup = bs3.BeautifulSoup(urllib2.urlopen(dell_support_url+service_tag).read())
+        soup = bs3.BeautifulSoup(urllib2.urlopen(dell_support_url+service_tag).read())
     except urllib2.URLError:
-	soup = None
+        soup = None
 
     if soup != None:
-	
-	tmp = soup.find('li', {"class" : "TopTwoWarrantyListItem"})
-	if tmp != None:
-	   support_type = tmp.findAll('b')[0].string
-	else:
-	    support_type = ''
-	try:
-	    tmp = soup.find('li', {"class" : "TopTwoWarrantyListItem"})
-	except urllib2.URLError:
-	    tmp = None
+        
+        tmp = soup.find('li', {"class" : "TopTwoWarrantyListItem"})
+        if tmp != None:
+           support_type = tmp.findAll('b')[0].string
+        else:
+            support_type = ''
+        try:
+            tmp = soup.find('li', {"class" : "TopTwoWarrantyListItem"})
+        except urllib2.URLError:
+            tmp = None
 
-	if tmp != None:
-	   support_time = tmp.findAll('b')[1].string
-	else:
-	    support_time = ''
+        if tmp != None:
+           support_time = tmp.findAll('b')[1].string
+        else:
+            support_time = ''
 
-	output_list = [support_type, support_time]
+        output_list = [support_type, support_time]
     else:
-	output_list = None
+        output_list = None
 
     return output_list

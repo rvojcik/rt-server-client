@@ -27,9 +27,9 @@ def get_ip4_addr(ifname):
     addresses = []
     lines = commands.getoutput('ip addr show dev '+ ifname +' | grep "inet "').split('\n')
     for line in lines:
-	if line != '':
-	    address = line.strip().split(' ')[1].split('/')[0] 
-	    addresses.append(address)
+        if line != '':
+            address = line.strip().split(' ')[1].split('/')[0] 
+            addresses.append(address)
 
     return addresses
 
@@ -37,10 +37,10 @@ def get_ip6_addr(ifname):
     addresses = []
     lines = commands.getoutput('ip addr show dev '+ ifname +' | grep "inet6 "').split('\n')
     for line in lines:
-	if line != '':
-	    address = line.strip().split(' ')[1].split('/')[0] 
-	    if address.find('fe80') != 0:
-		addresses.append(address)
+        if line != '':
+            address = line.strip().split(' ')[1].split('/')[0] 
+            if address.find('fe80') != 0:
+                addresses.append(address)
 
     return addresses
 def get_hw_addr(ifname):
@@ -59,19 +59,19 @@ def get_interfaces():
         if (count > 1):
                 words = line.split()
                 interface = words[0]
-		interface_name = interface.split(':')[0]
-		if interface_name.find('eth') > -1:
-		    interfaces.append(interface_name)
-		elif interface_name.find('bond') > -1:
-		    interfaces.append(interface_name)
-		elif interface_name.find('san') > -1:
-		    interfaces.append(interface_name)
-		elif interface_name.find('br') > -1:
-		    interfaces.append(interface_name)
-		elif interface_name.find('venet') > -1:
-		    interfaces.append(interface_name)
-		elif interface_name.find('veth') > -1:
-		    interfaces.append(interface_name)
+                interface_name = interface.split(':')[0]
+                if interface_name.find('eth') > -1:
+                    interfaces.append(interface_name)
+                elif interface_name.find('bond') > -1:
+                    interfaces.append(interface_name)
+                elif interface_name.find('san') > -1:
+                    interfaces.append(interface_name)
+                elif interface_name.find('br') > -1:
+                    interfaces.append(interface_name)
+                elif interface_name.find('venet') > -1:
+                    interfaces.append(interface_name)
+                elif interface_name.find('veth') > -1:
+                    interfaces.append(interface_name)
 
         count += 1
    
