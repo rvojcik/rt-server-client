@@ -66,6 +66,7 @@ You should install this application whare you want. I reccommend put it to /opt.
 If it ends without any message, it was successful. Look into RackTables web interface for new object.
 
 Add to root crontab following line for run script every 30 minutes
+
     */30 * * * * cd /opt/rt-server-client ; ./system-info.py
 
 Normaly script ends without any output. If something go wrong it returns some output of the error. 
@@ -87,6 +88,7 @@ You should install it from source or from packages.
 Name of module depends on version, inux distribution etc.
 
 If you see someting like this:
+
     Traceback (most recent call last):
       File "./system-info.py", line 60, in <module>
         from ToolBox import net, dell
