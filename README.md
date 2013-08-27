@@ -66,14 +66,16 @@ You should install this application whare you want. I reccommend put it to /opt.
 If it ends without any message, it was successful. Look into RackTables web interface for new object.
 
 Add to root crontab following line for run script every 30 minutes
-   */30 * * * * cd /opt/rt-server-client ; ./system-info.py
+    */30 * * * * cd /opt/rt-server-client ; ./system-info.py
 
 Normaly script ends without any output. If something go wrong it returns some output of the error. 
 
-Dell Servers ans HW Support Type:
+'''Dell Servers ans HW Support Type''':
 
-When using with dell servers, script try to find Attribute 'HW support type'. This is not default racktables attribute.
-You must go in racktables to Configuration->Attributes->Add attribute. Add 'HW support type' as string and then go to 'Attribute Map' and assign this new attribute to Server objects.
+When using with dell servers, script try to find Attribute '''HW support type'''. This is not default racktables attribute.
+You must go in racktables to '''Configuration->Attributes->Add attribute'''. 
+
+Add 'HW support type' as string and then go to 'Attribute Map' and assign this new attribute to Server objects.
 
 Without this modification you probably get some error on Dell servers.
 
@@ -92,7 +94,7 @@ If you see someting like this:
         import bs3
     ImportError: No module named bs3
 
-Edit please lib/ToolBox/dell/__init__.py and change "import bs3" to correct name of BeautifulSoup
+Edit please '''lib/ToolBox/dell/__init__.py''' and change "import bs3" to correct name of BeautifulSoup
 module (eg. bs4, BeautifulSoup ... )
 
 
