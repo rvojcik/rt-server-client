@@ -34,6 +34,7 @@ TODO
 ----
     * support for other virtualization technology (KVM, VirtualBox)
     * support for windows servers
+    * support for FreeBSD
 
 Requirements
 ------------
@@ -68,6 +69,13 @@ Add to root crontab following line for run script every 30 minutes
    */30 * * * * cd /opt/rt-server-client ; ./system-info.py
 
 Normaly script ends without any output. If something go wrong it returns some output of the error. 
+
+Dell Servers ans HW Support Type:
+
+When using with dell servers, script try to find Attribute 'HW support type'. This is not default racktables attribute.
+You must go in racktables to Configuration->Attributes->Add attribute. Add 'HW support type' as string and then go to 'Attribute Map' and assign this new attribute to Server objects.
+
+Without this modification you probably get some error on Dell servers.
 
 Issues
 ------
