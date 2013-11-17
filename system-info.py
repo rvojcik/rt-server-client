@@ -209,8 +209,8 @@ for interface in device_list:
         for line in lldp_output.split('\n'):
             if line.find('lldp.'+interface+'.chassis.name') > -1:
                 switch_name = line.split('=')[1]
-        elif line.find('lldp.'+interface+'.port.descr') > -1:
-            switch_port = line.split('=')[1]
+            elif line.find('lldp.'+interface+'.port.descr') > -1:
+                switch_port = line.split('=')[1]
     # For Force10
     elif lldp_output.find('Force10') > -1:
         for line in lldp_output.split('\n'):
