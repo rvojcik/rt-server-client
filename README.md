@@ -98,6 +98,11 @@ If you see someting like this:
 
 Edit please '''lib/ToolBox/dell/__init__.py''' and change "import bs3" to correct name of BeautifulSoup
 module (eg. bs4, BeautifulSoup ... )
+Beware, next parts of code use BeautifulSoup as bs3 so import correct modul with "as bs3"
+    import <your name of BeautifulSoup> as bs3 
+
+Example (for Debian Wheezy):
+    import BeautifulSoup as bs3
 
 
 License
