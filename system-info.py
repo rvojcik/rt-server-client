@@ -320,6 +320,8 @@ def InsertAttribute(object_id,object_tid,attr_id,string_value,uint_value,name):
     sql = "SELECT string_value,uint_value FROM AttributeValue WHERE object_id = %d AND object_tid = %d AND attr_id = %d" % (object_id, object_tid, attr_id)
     dbresult.execute(sql)
     result = dbresult.fetchone()
+    old_string_value = None;
+
     if result != None:
         # Check if attribute value is same and determine attribute type
         old_string_value = result[0]
