@@ -72,6 +72,8 @@ def get_interfaces():
                     interfaces.append(interface_name)
                 elif interface_name.find('veth') > -1:
                     interfaces.append(interface_name)
+                elif interface_name.find('em') > -1:
+                    interfaces.append(interface_name)
 
         count += 1
    
