@@ -471,7 +471,7 @@ def LinkNetworkInterface(object_id,interface,switch_name,interface_switch):
         if switch_object_id != None:
             switch_port_id = GetInterfaceId(switch_object_id,interface_switch)
             if switch_port_id != None:
-                sql = "SELECT portb FROM Link WHERE porta = %d" % (port_id)
+                sql = "SELECT portb FROM Link WHERE porta = %d OR portb = %d" % (port_id, port_id)
                 dbresult.execute(sql)
                 result = dbresult.fetchone()
                 if result == None:
@@ -484,7 +484,7 @@ def LinkNetworkInterface(object_id,interface,switch_name,interface_switch):
                     #Update old connection
                     old_switch_port_id = result[0]
                     if old_switch_port_id != switch_port_id:
-                        sql = "UPDATE Link set portb = %d WHERE porta = %d" % (switch_port_id,port_id)
+                        sql = "UPDATE Link set portb = %d, porta=%d WHERE porta = %d OR portb = %d" % (switch_port_id, port_id, port_id, port_id)
                         dbresult.execute(sql)
                         db.commit()
                         sql = "SELECT Port.name as port_name, Object.name as obj_name FROM Port INNER JOIN Object ON Port.object_id = Object.id WHERE Port.id = %d" % old_switch_port_id
