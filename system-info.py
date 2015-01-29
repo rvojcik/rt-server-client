@@ -49,6 +49,12 @@ import re
 import random
 import shutil
 
+#FOR MAC
+import fcntl
+import socket
+import struct
+#END
+
 # Get script path
 script_path = os.path.dirname(sys.argv[0])
 
@@ -79,6 +85,13 @@ config.readfp(config_file)
 
 # Close config
 config_file.close()
+
+#FOR MAC
+def getHwAddr(ifname):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    info = fcntl.ioctl(s.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
+    return ''.join(['%02x' % ord(char) for char in info[18:24]])
+#END
 
 def GenerateServiceTag(size):
     """Service tag generator"""
@@ -290,6 +303,8 @@ if server_type_id == 1504:
 #count = 0
 #for interface in device_list:
 #    print interface
+#    print "MAC: "
+#    print getHwAddr(interface)
 #    print "IPv4: "
 #    print interfaces_ips[count]
 #    print "IPv6: "
@@ -442,18 +457,23 @@ def GetDictionaryId(searchstring):
 
 def UpdateNetworkInterface(object_id,interface):
     """Add network interfece to object if not exist"""
-
-    sql = "SELECT id,name FROM Port WHERE object_id = %d AND name = '%s'" % (object_id, interface)
+    # Get MAC for ETHx
+    mac = getHwAddr(interface)
+    sql = "SELECT id,name,l2address FROM Port WHERE object_id = %d AND name = '%s' AND l2address = '%s'" % (object_id, interface,mac)
     dbresult.execute(sql)
-
     result = dbresult.fetchone()
+    sql1 = "SELECT id,name,l2address FROM Port WHERE object_id = %d AND name = '%s'" % (object_id, interface)
+    dbresult.execute(sql1)
+    result1 = dbresult.fetchone()
     if result == None:
-
-        sql = "INSERT INTO Port (object_id,name,iif_id,type) VALUES (%d,'%s',1,24)" % (object_id,interface)
+        if result1 != None:
+            sql = "DELETE FROM Port WHERE object_id = %d AND name = '%s'" % (object_id, interface)
+	    dbresult.execute(sql)
+            db.commit()
+        sql = "INSERT INTO Port (object_id,name,iif_id,type,l2address) VALUES (%d,'%s',1,24,'%s')" % (object_id,interface,mac)
         dbresult.execute(sql)
         db.commit()
         port_id = dbresult.lastrowid
-
     else:
         #
         port_id = result[0]
