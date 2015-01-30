@@ -245,6 +245,11 @@ if os_codename == '':
         if line.find('Codename:') > -1:
             os_codename = line.split()[1]
 
+if os_distribution == "Ubuntu":
+    os_searchstring = os_distribution+"%"+os_version
+else:
+    os_searchstring = os_distribution+"%"+os_codename
+
 # Get Drac IP
 output = commands.getstatusoutput('omreport chassis remoteaccess config=nic')
 
@@ -720,8 +725,7 @@ if dbresult.fetchone() == None:
 
         # Insert attributes, OS info and waranty
         #get id of OS
-        searchstring = os_distribution+"%"+os_codename
-        os_id = GetDictionaryId(searchstring)
+        os_id = GetDictionaryId(os_searchstring)
         attr_id = GetAttributeId("SW type")
         if os_id != None:
             InsertAttribute(object_id,server_type_id,attr_id,"NULL",os_id,hostname)
@@ -817,8 +821,7 @@ else:
 
         # Insert attributes, OS info and waranty
         #get id of OS
-        searchstring = os_distribution+"%"+os_codename
-        os_id = GetDictionaryId(searchstring)
+        os_id = GetDictionaryId(os_searchstring)
         attr_id = GetAttributeId("SW type")
         if os_id != None:
             InsertAttribute(object_id,server_type_id,attr_id,"NULL",os_id,hostname)
