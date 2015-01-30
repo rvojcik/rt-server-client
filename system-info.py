@@ -143,6 +143,13 @@ interfaces_ips6 = []
 hypervisor = "no"
 server_type_id = 4
 
+#VMware
+output = commands.getoutput('lspci | grep -i VMware | wc -l')
+if output >= 20:
+    # Default it's not hypervisor and virtualization
+    hypervisor = "no"
+    server_type_id = 1504
+
 # XEN
 if os.path.isdir('/proc/xen'):
     if not os.path.isfile('/proc/xen/xenbus'):
