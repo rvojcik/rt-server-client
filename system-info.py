@@ -462,6 +462,7 @@ if not rtobject.ObjectExistST(service_tag):
             #Add MAC address
             if interfaces_mac[device_list.index(device)] != '':
                 for mac in interfaces_mac[device_list.index(device)]:
+                    print_debug("Calling InterfaceAddMAC(%d,%s,%s)"%(object_id, device, mac))
                     rtobject.InterfaceAddMAC(object_id,device,mac)
 
 
@@ -565,8 +566,9 @@ else:
                     rtobject.InterfaceAddIpv6IP(object_id,device,ip)
             #Add MAC address
             if interfaces_mac[device_list.index(device)] != '':
-                for mac in interfaces_mac[device_list.index(device)]:
-                    rtobject.InterfaceAddMAC(object_id,device,mac)
+                mac = interfaces_mac[device_list.index(device)]
+                print_debug("Calling InterfaceAddMAC(%d,%s,%s)"%(object_id, device, mac))
+                rtobject.InterfaceAddMAC(object_id,device,mac)
 
         # Update motd from comment And Tags
         comment = rtobject.GetObjectComment(object_id)
