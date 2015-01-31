@@ -48,12 +48,7 @@ import datetime
 import re
 import random
 import shutil
-
-#FOR MAC
-import fcntl
-import socket
-import struct
-#END
+import argparse
 
 # Get script path
 script_path = os.path.dirname(sys.argv[0])
@@ -71,7 +66,7 @@ motd_file_original = "/etc/motd.ls.orig"
 motd_file = "/etc/motd"
 
 # Sleep for some seconds. When running on 200 hosts in same second, local dns should have a problem with it
-time.sleep(random.randint(1,12))
+#time.sleep(random.randint(1,12))
 
 
 try:
@@ -87,12 +82,28 @@ config.readfp(config_file)
 # Close config
 config_file.close()
 
-#FOR MAC
-def getHwAddr(ifname):
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    info = fcntl.ioctl(s.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
-    return ''.join(['%02x' % ord(char) for char in info[18:24]])
-#END
+# Parsing arguments {{{
+parser = argparse.ArgumentParser(
+    description= 'Racktables server client',
+    epilog='Created by Robert Vojcik <robert@vojcik.net>')
+parser.add_argument("-d", action="store_true", dest="debug_mode", default=False, help="Debug mode")
+parser.add_argument("--init-racktables", action="store_true", dest="init_mode", default=False, help="Init or check racktables DB for specials")
+
+args = parser.parse_args()
+# END PARSING ARGUMENTS }}}
+
+#### Init Mode
+if args.init_mode:
+    print "Init mode "
+    sys.exit(0)
+
+#### END Init Mode
+
+def print_debug(text):
+    """Prind debug information"""
+    if args.debug_mode:
+        print "DEBUG ",text
+
 
 def GenerateServiceTag(size):
     """Service tag generator"""
@@ -103,12 +114,15 @@ def GenerateServiceTag(size):
 
     service_tag = "".join(random.choice(chars) for x in range(size))
 
+    print_debug("Generated service tag: " + service_tag)
+
     return service_tag
 
 def GetVirtualServers(virtualization):
     """Create list of virtual servers"""
 
     if virtualization == 'xen':
+        print_debug("Virtualization is XEN")
         output = commands.getoutput('xm list')
         virtuals = [] 
 
@@ -123,13 +137,16 @@ def GetVirtualServers(virtualization):
         for line in output.splitlines()[1:]:
             virtual = line.split()[4]
             virtuals.append(virtual)
+
+    print_debug("I found virtuals: " + str(virtuals))
    
 
     return virtuals
 
-
+# System examination {{{
 # Get interface list into interfaces list
 device_list = net.get_interfaces()
+print_debug("Founded interfaces: " + str(device_list))
 
 # Get ip address for each interface
 # Get connections from lldp
@@ -137,6 +154,7 @@ device_list = net.get_interfaces()
 interface_connections = []
 interfaces_ips = []
 interfaces_ips6 = []
+interfaces_mac = []
 
 # Check for virtualization 
 
@@ -150,8 +168,10 @@ if os.path.isdir('/proc/xen'):
         #It is xen virtual server
         hypervisor = "no"
         server_type_id = 1504
+        print_debug("Hypervisor test: Hypervisor: %s, Server Type: %d" % (hypervisor, server_type_id))
     else:
         hypervisor = "yes" 
+        print_debug("Hypervisor test: Hypervisor: %s, Server Type: %d" % (hypervisor, server_type_id))
         virtual_servers = GetVirtualServers('xen')
     
 # OpenVZ
@@ -160,10 +180,12 @@ if os.path.isdir('/proc/vz'):
     if os.path.isfile('/proc/vz/veinfo'):
         #It is OpenVZ Hypervisor
         hypervisor = "yes"
+        print_debug("Hypervisor test: Hypervisor: %s, Server Type: %d" % (hypervisor, server_type_id))
         virtual_servers = GetVirtualServers('vz')
     else:
         hypervisor = "no"
         server_type_id = 1504
+        print_debug("Hypervisor test: Hypervisor: %s, Server Type: %d" % (hypervisor, server_type_id))
 
 product_name = ''
 service_tag = ''
@@ -172,6 +194,7 @@ if server_type_id == 4:
     # Get service tag
     # Server type, model
     getsystemid = commands.getoutput('getSystemId 2>/dev/null')
+    print_debug("GetSystemId: %s" % (str(getsystemid)))
 
     if re.findall('\nProduct Name:.*',getsystemid):
         try:
@@ -180,6 +203,7 @@ if server_type_id == 4:
             product_name = "n/a"
     else:
         product_name = "unknown"
+    print_debug("Product name: %s" % (str(product_name)))
 
     if re.findall('\nService Tag:.*',getsystemid):
         try:
@@ -188,6 +212,7 @@ if server_type_id == 4:
             service_tag = ""
     else:
         service_tag = ""
+    print_debug("Service TAG: %s" % (str(service_tag)))
 
     if re.findall('\nVendor:.*',getsystemid):
         try:
@@ -215,6 +240,7 @@ if server_type_id == 4:
             stag_file = open(stag_path, 'w')
             stag_file.write(service_tag)
             stag_file.close()
+    print_debug("Vendor: %s" % (str(vendor)))
 
 # CPU information
 # Read /proc/cpuinfo into variable
@@ -240,12 +266,14 @@ else:
     cpu_num = ""
     cpu_cores = ""
     cpu_mhz = ""
+print_debug("CPU INFO: cpu_num=%d, cpu_cores=%d, cpu_mhz=%d, cpu_logical_num=%d, cpu_model_name=%s" % (cpu_num, cpu_cores, cpu_mhz, cpu_logical_num, cpu_model_name))
 
 # Get Memory info
 meminfo = open('/proc/meminfo')
 file_c = meminfo.read()
 meminfo.close()
 memory_mb = int(file_c.split()[1]) / 1024
+print_debug("Memory MB: %d" % (memory_mb))
 
 # Network Interfaces LLDP Connections
 for interface in device_list:
@@ -255,6 +283,7 @@ for interface in device_list:
     # Get ip addresses
     interfaces_ips.append(net.get_ip4_addr(interface))
     interfaces_ips6.append(net.get_ip6_addr(interface))
+    interfaces_mac.append(net.get_hw_addr(interface))
     # Get lldp
     lldp_output = commands.getoutput('lldpctl -f keyvalue ' + interface)
 
@@ -278,6 +307,10 @@ for interface in device_list:
     connection = [switch_name, switch_port]
     interface_connections.append(connection)
 
+    print_debug("Found ips: %s" % (str(interfaces_ips)))
+    print_debug("Found ips6: %s" % (str(interfaces_ips6)))
+    print_debug("Found mac: %s" % (str(interfaces_mac)))
+    print_debug("Found interface connections: %s" % (str(interface_connections)))
 
 # OS, type, release
 os_distribution, os_version, os_codename = platform.dist()
@@ -292,6 +325,10 @@ if os_distribution == "Ubuntu":
 else:
     os_searchstring = os_distribution+"%"+os_codename
 
+print_debug("OS Info: %s %s %s" % (os_distribution, os_version, os_codename))
+print_debug("OS Search string:%s" % (os_searchstring))
+
+
 # Get Drac IP
 output = commands.getstatusoutput('omreport chassis remoteaccess config=nic')
 
@@ -299,7 +336,7 @@ if output[0] == 0:
     drac_ip = re.findall('[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}',output[1])[0]
 else:
     drac_ip = ''
-
+print_debug("Drac IP: %s" % (drac_ip))
 # Get label from Drac (display)
 
 output = commands.getstatusoutput('omreport chassis frontpanel')
@@ -315,27 +352,21 @@ if output[0] == 0:
 else:
     update_label = "no"
     label = ""
-
-# Get support and waranty for service tag
-if service_tag == '':
-    support_type = ''
-    support_ends = ''
-else:
-    dell_list = dell.get_waranty_info(service_tag)
-    if dell_list != None:
-        support_type, support_ends = dell_list
-    else:
-        support_type = ''
-        support_ends = ''
+print_debug("Drac Label: update=%s, text=%s" % (update_label, label))
 
 # Get hostname
 hostname = platform.node()
+print_debug("Hostname: " + hostname)
 # Get Kernel version
 kernel_version = platform.release()
+print_debug("Kernel: " + kernel_version)
 
 # Workaround for VPS and servicetag
 if server_type_id == 1504:
     service_tag = "VPS-"+hostname
+    print_debug("VPS Service tag: " + service_tag)
+
+# System examination }}}
 
 ## Main Database part
 
@@ -353,10 +384,12 @@ rtobject = rtapi.RTObject(db)
 
 
 if not rtobject.ObjectExistST(service_tag):
+    print_debug("Object with service tag %s is not in DB" % (service_tag))
     #
     # service tag not exist
     #
     if not rtobject.ObjectExistName(hostname):
+        print_debug("Object with hostname %s is not in DB" % (hostname))
         # hostname not exist = insert new server Object
         rtobject.AddObject(hostname,server_type_id,service_tag,label)
         object_id = rtobject.GetObjectId(hostname)
@@ -426,7 +459,10 @@ if not rtobject.ObjectExistST(service_tag):
             if interfaces_ips6[device_list.index(device)] != '':
                 for ip in interfaces_ips6[device_list.index(device)]:
                     rtobject.InterfaceAddIpv6IP(object_id,device,ip)
-
+            #Add MAC address
+            if interfaces_mac[device_list.index(device)] != '':
+                for mac in interfaces_mac[device_list.index(device)]:
+                    rtobject.InterfaceAddMAC(object_id,device,mac)
 
 
     else:
@@ -439,7 +475,9 @@ else:
     # service tag exist
     #
     #check if hostname is the same
+    print_debug("Object with service tag %s is already in DB" % (service_tag))
     if rtobject.ObjectExistName(hostname):
+        print_debug("Object with hostname %s is already in DB" % (hostname))
         # hostname exist and service tag is same, update info
 
         if rtobject.ObjectExistSTName(hostname, service_tag):
@@ -525,6 +563,10 @@ else:
                 rtobject.CleanIPv6Addresses(object_id,interfaces_ips6[device_list.index(device)],device)
                 for ip in interfaces_ips6[device_list.index(device)]:
                     rtobject.InterfaceAddIpv6IP(object_id,device,ip)
+            #Add MAC address
+            if interfaces_mac[device_list.index(device)] != '':
+                for mac in interfaces_mac[device_list.index(device)]:
+                    rtobject.InterfaceAddMAC(object_id,device,mac)
 
         # Update motd from comment And Tags
         comment = rtobject.GetObjectComment(object_id)
