@@ -156,11 +156,50 @@ interfaces_ips = []
 interfaces_ips6 = []
 interfaces_mac = []
 
+# CPU information
+# Read /proc/cpuinfo into variable
+cpu_proc = open('/proc/cpuinfo')
+file_c = cpu_proc.read()
+cpu_proc.close()
+
+# Get number of logical CPUs
+cpu_logical_num = file_c.count('processor')
+# Get CPU Model Name
+cpu_model_name = re.sub(' +',' ',re.findall('model name.*',file_c)[0].split(': ')[1])
+# Physical CPU information
+lscpu_output = commands.getstatusoutput('lscpu')
+if lscpu_output[0] == 0:
+    lscpu = lscpu_output[1]
+    try:
+        cpu_num = int(re.findall('CPU socket.*',lscpu)[0].split(':')[1].strip())
+    except:
+        cpu_num = int(re.findall('Socket\(s\).*',lscpu)[0].split(':')[1].strip())
+    cpu_cores = int(re.findall('Core\(s\) per socket.*',lscpu)[0].split(':')[1].strip())
+    cpu_mhz = int(re.findall('CPU MHz.*',lscpu)[0].split(':')[1].strip().split('.')[0])
+else:
+    cpu_num = ""
+    cpu_cores = ""
+    cpu_mhz = ""
+print_debug("CPU INFO: cpu_num=%d, cpu_cores=%d, cpu_mhz=%d, cpu_logical_num=%d, cpu_model_name=%s" % (cpu_num, cpu_cores, cpu_mhz, cpu_logical_num, cpu_model_name))
+
 # Check for virtualization 
 
 # Default it's not hypervisor and no virtualization
 hypervisor = "no"
 server_type_id = 4
+
+# QEMU / KVM
+if re.match('.*QEMU.*', cpu_model_name):
+    server_type_id = 1504
+    print_debug("Hypervisor test: Hypervisor: %s, Server Type: %d" % (hypervisor, server_type_id))
+
+#VMware
+output = commands.getoutput('lspci | grep -i VMware | wc -l')
+if output >= 20:
+    # Default it's not hypervisor and virtualization
+    hypervisor = "no"
+    server_type_id = 1504
+    print_debug("Hypervisor test: Hypervisor: %s, Server Type: %d" % (hypervisor, server_type_id))
 
 # XEN
 if os.path.isdir('/proc/xen'):
@@ -212,7 +251,6 @@ if server_type_id == 4:
             service_tag = ""
     else:
         service_tag = ""
-    print_debug("Service TAG: %s" % (str(service_tag)))
 
     if re.findall('\nVendor:.*',getsystemid):
         try:
@@ -241,32 +279,6 @@ if server_type_id == 4:
             stag_file.write(service_tag)
             stag_file.close()
     print_debug("Vendor: %s" % (str(vendor)))
-
-# CPU information
-# Read /proc/cpuinfo into variable
-cpu_proc = open('/proc/cpuinfo')
-file_c = cpu_proc.read()
-cpu_proc.close()
-
-# Get number of logical CPUs
-cpu_logical_num = file_c.count('processor')
-# Get CPU Model Name
-cpu_model_name = re.sub(' +',' ',re.findall('model name.*',file_c)[0].split(': ')[1])
-# Physical CPU information
-lscpu_output = commands.getstatusoutput('lscpu')
-if lscpu_output[0] == 0:
-    lscpu = lscpu_output[1]
-    try:
-        cpu_num = int(re.findall('CPU socket.*',lscpu)[0].split(':')[1].strip())
-    except:
-        cpu_num = int(re.findall('Socket\(s\).*',lscpu)[0].split(':')[1].strip())
-    cpu_cores = int(re.findall('Core\(s\) per socket.*',lscpu)[0].split(':')[1].strip())
-    cpu_mhz = int(re.findall('CPU MHz.*',lscpu)[0].split(':')[1].strip().split('.')[0])
-else:
-    cpu_num = ""
-    cpu_cores = ""
-    cpu_mhz = ""
-print_debug("CPU INFO: cpu_num=%d, cpu_cores=%d, cpu_mhz=%d, cpu_logical_num=%d, cpu_model_name=%s" % (cpu_num, cpu_cores, cpu_mhz, cpu_logical_num, cpu_model_name))
 
 # Get Memory info
 meminfo = open('/proc/meminfo')
@@ -366,6 +378,7 @@ if server_type_id == 1504:
     service_tag = "VPS-"+hostname
     print_debug("VPS Service tag: " + service_tag)
 
+print_debug("Service TAG: %s" % (str(service_tag)))
 # System examination }}}
 
 ## Main Database part
@@ -461,9 +474,9 @@ if not rtobject.ObjectExistST(service_tag):
                     rtobject.InterfaceAddIpv6IP(object_id,device,ip)
             #Add MAC address
             if interfaces_mac[device_list.index(device)] != '':
-                for mac in interfaces_mac[device_list.index(device)]:
-                    print_debug("Calling InterfaceAddMAC(%d,%s,%s)"%(object_id, device, mac))
-                    rtobject.InterfaceAddMAC(object_id,device,mac)
+                mac = interfaces_mac[device_list.index(device)]
+                print_debug("Calling InterfaceAddMAC(%d,%s,%s)"%(object_id, device, mac))
+                rtobject.InterfaceAddMAC(object_id,device,mac)
 
 
     else:
