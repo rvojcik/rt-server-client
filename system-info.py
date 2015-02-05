@@ -167,6 +167,9 @@ cpu_logical_num = file_c.count('processor')
 # Get CPU Model Name
 cpu_model_name = re.sub(' +',' ',re.findall('model name.*',file_c)[0].split(': ')[1])
 # Physical CPU information
+# lscpu not working on some linux so commenting out print_debug below
+# an equivilant command could be used like
+# /bin/cat /proc/cpuinfo|/bin/grep -E 'processor|model name|cache size|core|sibling|physical'
 lscpu_output = commands.getstatusoutput('lscpu')
 if lscpu_output[0] == 0:
     lscpu = lscpu_output[1]
@@ -180,7 +183,8 @@ else:
     cpu_num = ""
     cpu_cores = ""
     cpu_mhz = ""
-print_debug("CPU INFO: cpu_num=%d, cpu_cores=%d, cpu_mhz=%d, cpu_logical_num=%d, cpu_model_name=%s" % (cpu_num, cpu_cores, cpu_mhz, cpu_logical_num, cpu_model_name))
+# Commenting out as if lscpu is missing the following fails on a physical server
+#print_debug("CPU INFO: cpu_num=%d, cpu_cores=%d, cpu_mhz=%d, cpu_logical_num=%d, cpu_model_name=%s" % (cpu_num, cpu_cores, cpu_mhz, cpu_logical_num, cpu_model_name))
 
 # Check for virtualization 
 
@@ -195,7 +199,7 @@ if re.match('.*QEMU.*', cpu_model_name):
 
 #VMware
 output = commands.getoutput('lspci | grep -i VMware | wc -l')
-if output >= 20:
+if output >= '20':
     # Default it's not hypervisor and virtualization
     hypervisor = "no"
     server_type_id = 1504
@@ -279,6 +283,16 @@ if server_type_id == 4:
             stag_file.write(service_tag)
             stag_file.close()
     print_debug("Vendor: %s" % (str(vendor)))
+
+    chkhp = commands.getoutput('dmidecode -s "system-manufacturer"')
+    if chkhp == 'HP':
+        vendor = output
+        # Default it's not hypervisor and virtualization
+        hypervisor = "no"
+        server_type_id = 4
+        service_tag =  commands.getoutput('dmidecode -s "system-serial-number"')
+        product_name = commands.getoutput('dmidecode -s "system-product-name"')
+        print_debug("Hypervisor test: Hypervisor: %s, Server Type: %d" % (hypervisor, server_type_id))
 
 # Get Memory info
 meminfo = open('/proc/meminfo')
