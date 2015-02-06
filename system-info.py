@@ -167,9 +167,6 @@ cpu_logical_num = file_c.count('processor')
 # Get CPU Model Name
 cpu_model_name = re.sub(' +',' ',re.findall('model name.*',file_c)[0].split(': ')[1])
 # Physical CPU information
-# lscpu not working on some linux so commenting out print_debug below
-# an equivilant command could be used like
-# /bin/cat /proc/cpuinfo|/bin/grep -E 'processor|model name|cache size|core|sibling|physical'
 lscpu_output = commands.getstatusoutput('lscpu')
 if lscpu_output[0] == 0:
     lscpu = lscpu_output[1]
@@ -184,7 +181,7 @@ else:
     cpu_cores = ""
     cpu_mhz = ""
 # Commenting out as if lscpu is missing the following fails on a physical server
-#print_debug("CPU INFO: cpu_num=%d, cpu_cores=%d, cpu_mhz=%d, cpu_logical_num=%d, cpu_model_name=%s" % (cpu_num, cpu_cores, cpu_mhz, cpu_logical_num, cpu_model_name))
+print_debug("CPU INFO: cpu_num=%d, cpu_cores=%d, cpu_mhz=%d, cpu_logical_num=%d, cpu_model_name=%s" % (cpu_num, cpu_cores, cpu_mhz, cpu_logical_num, cpu_model_name))
 
 # Check for virtualization 
 
