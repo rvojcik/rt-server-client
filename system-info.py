@@ -2,45 +2,52 @@
 #
 # This is server-audit script for Racktables project
 # It discover system, import or update infromation into racktables database
-# 
-# Script support following infromation
-#   * hostname
+#
+# Script support following information
+#    * hostname
 #    * service tag
-#    * supermicro exeption for service tag (same service tag and express servicetag for all machines)
+#    * supermicro exception for service tag (same service tag and express servicetag for all machines)
 #    * for Dell servers it retrieve support type and support expiration date
 #    * Physical and logical interfaces (eth,bond,bridges)
+#    * Interface MAC address
 #    * IPv4 and IPv6 IP addresses, import and update in database
-#    * Dell Drack IP address (require Dell-OMSA Installed)
+#    * Dell DRAC IP address (require Dell-OMSA Installed)
 #    * OS Dristribution and Release information
 #    * HW vendor and product type
 #    * Hypervisor recognition (Xen 4.x)
-#    * Virtual server recognition (Xen 4.x)
+#    * Virtual server recognition via 'virt-what'
 #    * Link Virtual server with hypervisor as container in Racktables
 #    * Racktables logging - when change ip addresses or virtual link with hypervisor
 #
 #    This utility is released under GPL v2
-#    
+#
 #    Server Audit utility for Racktables Datacenter management project.
 #    Copyright (C) 2012  Robert Vojcik (robert@vojcik.net)
-#    
+#
 #    This program is free software; you can redistribute it and/or
 #    modify it under the terms of the GNU General Public License
 #    as published by the Free Software Foundation; either version 2
 #    of the License, or (at your option) any later version.
-#    
+#
 #    This program is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
-#    
+#
 #    You should have received a copy of the GNU General Public License
 #    along with this program; if not, write to the Free Software
 #    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
 
+# TODO: Please see the TODO.txt file which should be in this directory.
+
+# Successfully ran unless we say otherwise (i.e., exit status of 0 per POSIX specification)
+ec = 0
+
 import sys
 import os
 import commands
+import logging
 import platform
 from ConfigParser import ConfigParser
 import time
@@ -53,7 +60,7 @@ import shutil
 import fcntl
 import socket
 import struct
-#END
+#END MAC
 
 # Get script path
 script_path = os.path.dirname(sys.argv[0])
@@ -64,20 +71,42 @@ sys.path.append(script_path + '/lib/')
 import ipaddr
 import MySQLdb
 from ToolBox import net, dell
+from optparse import OptionParser
+
+# Parse user provided command line options
+parser = OptionParser()
+parser.set_defaults(debug=False,maxsleep=12)
+parser.add_option("-s", "--sleep",
+                  dest="maxsleep",
+                  type="int",
+                  help="Randomly sleep up to SLEEP seconds",
+                  metavar="SLEEP")
+parser.add_option("-d", "--debug",
+                  action="store_true",
+                  dest="debug",
+                  help="print debug messages")
+(options, args) = parser.parse_args()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger()
+if options.debug == True:
+    logger.setLevel(logging.DEBUG)
 
 config_path = script_path + "/conf/"
 motd_file_original = "/etc/motd.ls.orig"
 motd_file = "/etc/motd"
 
-# Sleep for some seconds. When running on 200 hosts in same second, local dns should have a problem with it
-time.sleep(random.randint(1,12))
-
+# Sleep for some seconds. When running on 200 hosts in same second, local dns may have a problem with it
+mysleep = random.randint(0,options.maxsleep) # Start range at 0 so we can sleep 0 seconds if we want
+logging.debug("Sleeping for %i seconds", mysleep)
+time.sleep(mysleep)
 
 try:
     config_file = open(config_path + "main.conf")
 except IOError ,e:
     print("({})".format(e))
-    sys.exit()
+    sys.exit(1)
 
 # Parsing config options
 config = ConfigParser()
@@ -91,7 +120,7 @@ def getHwAddr(ifname):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     info = fcntl.ioctl(s.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
     return ''.join(['%02x' % ord(char) for char in info[18:24]])
-#END
+#END MAC
 
 def GenerateServiceTag(size):
     """Service tag generator"""
@@ -109,7 +138,7 @@ def GetVirtualServers(virtualization):
 
     if virtualization == 'xen':
         output = commands.getoutput('xm list')
-        virtuals = [] 
+        virtuals = []
 
         for line in output.splitlines()[2:]:
             virtual = line.split()[0]
@@ -117,12 +146,12 @@ def GetVirtualServers(virtualization):
 
     if virtualization == 'vz':
         output = commands.getoutput('vzlist')
-        virtuals = [] 
+        virtuals = []
 
         for line in output.splitlines()[1:]:
             virtual = line.split()[4]
             virtuals.append(virtual)
-   
+
 
     return virtuals
 
@@ -137,11 +166,21 @@ interface_connections = []
 interfaces_ips = []
 interfaces_ips6 = []
 
-# Check for virtualization 
+# Check for virtualization
 
 # Default it's not hypervisor and no virtualization
 hypervisor = "no"
 server_type_id = 4
+
+# Generic VPS check using 'virt-what' command
+virtwhatOutput = commands.getoutput('virt-what 2>/dev/null')
+
+if virtwhatOutput and not virtwhatOutput.isspace():
+    # the string is non-empty
+    virtwhatArray = virtwhatOutput.splitlines()
+    if virtwhatArray[0]:
+        hypervisor = "no"
+        server_type_id = 1504
 
 # XEN
 if os.path.isdir('/proc/xen'):
@@ -150,9 +189,9 @@ if os.path.isdir('/proc/xen'):
         hypervisor = "no"
         server_type_id = 1504
     else:
-        hypervisor = "yes" 
+        hypervisor = "yes"
         virtual_servers = GetVirtualServers('xen')
-    
+
 # OpenVZ
 if os.path.isdir('/proc/vz'):
     #It is OpenVZ technology
@@ -197,7 +236,7 @@ if server_type_id == 4:
             except IOError ,e:
                 print("({})".format(e))
                 sys.exit()
-        
+
             service_tag = stag_file.read()
         else:
             service_tag = GenerateServiceTag(10)
@@ -231,14 +270,15 @@ for interface in device_list:
                 switch_name = line.split('=')[1]
             elif line.find('lldp.'+interface+'.port.ifname') > -1:
                 switch_port = line.split('=')[1]
-    
+
     #add connection to list
     connection = [switch_name, switch_port]
     interface_connections.append(connection)
 
 
 # OS, type, release
-os_distribution, os_version, os_codename = platform.dist()
+os_distribution, os_version, os_codename = platform.linux_distribution()
+os_shortver = os_version.split('.')[0] # Better match the dictionary, e.g., "CentOS v6"
 # Stupid debian, empty os_codename
 if os_codename == '':
     for line in commands.getoutput('lsb_release -a').split('\n'):
@@ -248,7 +288,8 @@ if os_codename == '':
 if os_distribution == "Ubuntu":
     os_searchstring = os_distribution+"%"+os_version
 else:
-    os_searchstring = os_distribution+"%"+os_codename
+    #os_searchstring = os_distribution+"%"+os_codename
+    os_searchstring = os_distribution+"%"+os_shortver
 
 # Get Drac IP
 output = commands.getstatusoutput('omreport chassis remoteaccess config=nic')
@@ -287,7 +328,9 @@ else:
         support_ends = ''
 
 # Get hostname
-hostname = platform.node()
+fqdn = platform.node()
+hostname = fqdn.split('.')[0]
+
 # Get Kernel version
 kernel_version = platform.release()
 
@@ -297,31 +340,29 @@ if server_type_id == 1504:
 
 ########################
 ## Debug : Print outputs
-#print "Hostname: " + hostname
-#print "OS info: " +os_distribution+","+os_version+","+os_codename
-#print "Kernel: " +kernel_version
-#print "Service-Tag: " +service_tag
-#print "Server: "+vendor+" "+product_name
-#print "Support: "+support_type+", to "+support_ends
-#print "Interfaces: "+" ".join(str(x) for x in device_list[0:])
-#print "IPs: "
-#count = 0
-#for interface in device_list:
-#    print interface
-#    print "MAC: "
-#    print getHwAddr(interface)
-#    print "IPv4: "
-#    print interfaces_ips[count]
-#    print "IPv6: "
-#    print interfaces_ips6[count]
-#    count += 1
-#
-#print "Interfaces Connections:"
-#count = 0
-#for interface in interface_connections:
-#    print device_list[count]
-#    print interface
-#    count += 1
+logging.debug("Hostname: " + hostname)
+logging.debug("FQDN: " + fqdn)
+logging.debug("OS info: " +os_distribution+","+os_version+","+os_codename)
+logging.debug("Kernel: " +kernel_version)
+logging.debug("Service-Tag: " +service_tag)
+logging.debug("Server: "+vendor+" "+product_name)
+logging.debug("Support: "+support_type+", to "+support_ends)
+logging.debug("Interfaces: "+" ".join(str(x) for x in device_list[0:]))
+# IPs for each interface
+count = 0
+for interface in device_list:
+    # Convert the list element to a string so we can print it...
+    ipv4 = ''.join(interfaces_ips[count])
+    ipv6 = ''.join(interfaces_ips6[count])
+    logging.debug("MAC for %s - %s" % (interface, getHwAddr(interface)))
+    logging.debug("IPs for %s - IPv4: %s IPv6: %s" % (interface, ipv4, ipv6))
+    count += 1
+logging.debug("Interfaces Connections:")
+count = 0
+for interface in interface_connections:
+    logging.debug(device_list[count])
+    logging.debug(interface)
+    count += 1
 
 ###################
 # Database part
@@ -335,46 +376,46 @@ def InsertLog(object_id,content):
 
 def InsertAttribute(object_id,object_tid,attr_id,string_value,uint_value,name):
     """Add or Update object attribute, history logging supported"""
-    
+
     # Check if attribute exist
     sql = "SELECT string_value,uint_value FROM AttributeValue WHERE object_id = %d AND object_tid = %d AND attr_id = %d" % (object_id, object_tid, attr_id)
     dbresult.execute(sql)
     result = dbresult.fetchone()
     old_string_value = None;
+    old_uint_value = None;
 
     if result != None:
+        logging.debug("Comparing database attribute value with live system value")
         # Check if attribute value is same and determine attribute type
         old_string_value = result[0]
         old_uint_value = result[1]
         same_flag = "no"
         attribute_type = "None"
 
-    if old_string_value != None:
-        attribute_type = "string"
-        old_value = old_string_value
-        if old_string_value == string_value:
-            same_flag = "yes"
-        elif old_uint_value != None:
+        if old_string_value != None:
+            attribute_type = "string"
+            if old_string_value == string_value:
+                same_flag = "yes"
+
+        if old_uint_value != None:
             attribute_type = "uint"
-            old_value = old_uint_value
             if old_uint_value == uint_value:
                 same_flag = "yes"
 
-        # If exist, update value
-        new_value = ''
+        # If attribute exists and does not match live system, update value
         if same_flag == "no":
+            logging.debug("updating an attribute")
             if attribute_type == "string":
                 sql = "UPDATE AttributeValue SET string_value = '%s' WHERE object_id = %d AND attr_id = %d AND object_tid = %d" % (string_value, object_id, attr_id, object_tid)
-                new_value = string_value
             if attribute_type == "uint":
                 sql = "UPDATE AttributeValue SET uint_value = %d WHERE object_id = %d AND attr_id = %d AND object_tid = %d" % (uint_value, object_id, attr_id, object_tid)
-                new_value = uint_value
 
             dbresult.execute(sql)
             db.commit()
 
     else:
         # Attribute not exist, insert new
+        logging.debug("inserting an attribute")
         if string_value == "NULL":
             sql = "INSERT INTO AttributeValue (object_id,object_tid,attr_id,uint_value) VALUES (%d,%d,%d,%d)" % (object_id,object_tid,attr_id,uint_value)
         else:
@@ -386,7 +427,7 @@ def GetAttributeId(searchstring):
     """Search database using searchstring and return atribute id"""
     sql = "SELECT id FROM Attribute WHERE name LIKE '%"+searchstring+"%'"
     dbresult.execute(sql)
-  
+
     result = dbresult.fetchone()
     if result != None:
         getted_id = result[0]
@@ -462,23 +503,27 @@ def GetDictionaryId(searchstring):
 
 def UpdateNetworkInterface(object_id,interface):
     """Add network interfece to object if not exist"""
+
     # Get MAC for ETHx
     mac = getHwAddr(interface)
     sql = "SELECT id,name,l2address FROM Port WHERE object_id = %d AND name = '%s' AND l2address = '%s'" % (object_id, interface,mac)
     dbresult.execute(sql)
     result = dbresult.fetchone()
+
     sql1 = "SELECT id,name,l2address FROM Port WHERE object_id = %d AND name = '%s'" % (object_id, interface)
     dbresult.execute(sql1)
     result1 = dbresult.fetchone()
+
     if result == None:
         if result1 != None:
             sql = "DELETE FROM Port WHERE object_id = %d AND name = '%s'" % (object_id, interface)
-	    dbresult.execute(sql)
+            dbresult.execute(sql)
             db.commit()
         sql = "INSERT INTO Port (object_id,name,iif_id,type,l2address) VALUES (%d,'%s',1,24,'%s')" % (object_id,interface,mac)
         dbresult.execute(sql)
         db.commit()
         port_id = dbresult.lastrowid
+
     else:
         #
         port_id = result[0]
@@ -541,7 +586,7 @@ def InterfaceAddIpv4IP(object_id,device,ip):
 
     if result != None:
         old_ips = result
-    
+
     is_there = "no"
 
     for old_ip in old_ips:
@@ -557,7 +602,7 @@ def InterfaceAddIpv4IP(object_id,device,ip):
 
 def InterfaceAddIpv6IP(object_id,device,ip):
     """Add/Update IPv6 IP on interface"""
-    #Create address object using ipaddr 
+    #Create address object using ipaddr
     addr6 = ipaddr.IPAddress(ip)
     #Create IPv6 format for Mysql
     ip6 = "".join(str(x) for x in addr6.exploded.split(':'))
@@ -565,7 +610,7 @@ def InterfaceAddIpv6IP(object_id,device,ip):
     sql = "SELECT HEX(ip) FROM IPv6Allocation WHERE object_id = %d AND name = '%s'" % (object_id, device)
     dbresult.execute(sql)
     result = dbresult.fetchall()
-    
+
     if result != None:
         old_ips = result
 
@@ -604,7 +649,7 @@ def CleanVirtuals(object_id,virtual_servers):
             try:
                 test = new_virtuals_ids.index(old_id[0])
             except ValueError:
-                delete_virtual_id.append(old_id[0]) 
+                delete_virtual_id.append(old_id[0])
     if len(delete_virtual_id) != 0:
         for virt_id in delete_virtual_id:
 
@@ -631,7 +676,7 @@ def CleanIPAddresses(object_id,ip_addresses,device):
             try:
                 test = ip_addresses.index(old_ip[0])
             except ValueError:
-                delete_ips.append(old_ip[0]) 
+                delete_ips.append(old_ip[0])
     if len(delete_ips) != 0:
         for ip in delete_ips:
             sql = "DELETE FROM IPv4Allocation WHERE ip = INET_ATON('%s') AND object_id = %d AND name = '%s'" % (ip,object_id,device)
@@ -673,7 +718,7 @@ def CleanIPv6Addresses(object_id,ip_addresses,device):
 
     if len(delete_ips) != 0:
         for ip in delete_ips:
-            db_ip6_format = "".join(str(x) for x in ip.split(':')) 
+            db_ip6_format = "".join(str(x) for x in ip.split(':'))
             sql = "DELETE FROM IPv6Allocation WHERE ip = UNHEX('%s') AND object_id = %d AND name = '%s'" % (db_ip6_format,object_id,device)
             dbresult.execute(sql)
             db.commit()
@@ -702,12 +747,14 @@ try:
     # Create connection to database
     db = MySQLdb.connect(host=config.get('mysqldb','host'),port=3306, passwd=config.get('mysqldb','password'),db=config.get('mysqldb','db'),user=config.get('mysqldb','user'))
 except MySQLdb.Error ,e:
-    print "Error %d: %s" % (e.args[0],e.args[1])
+    logging.error("%d: %s" % (e.args[0],e.args[1]))
     sys.exit(1)
 #set cursor for db
 dbresult = db.cursor()
 
-
+#get id of OS - Known to fail for RHEV hosts...
+os_id = GetDictionaryId(os_searchstring)
+logging.debug("os_id: %s", os_id)
 
 dbresult.execute('SELECT name FROM Object WHERE asset_no = \''+service_tag+'\'')
 
@@ -724,19 +771,21 @@ if dbresult.fetchone() == None:
         object_id = dbresult.lastrowid
 
         # Insert attributes, OS info and waranty
-        #get id of OS
-        os_id = GetDictionaryId(os_searchstring)
         attr_id = GetAttributeId("SW type")
         if os_id != None:
             InsertAttribute(object_id,server_type_id,attr_id,"NULL",os_id,hostname)
 
-        
+        # Insert FQDN value
+        attrid_fqdn = GetAttributeId("FQDN")
+        if fqdn != None and hostname != None:
+            InsertAttribute(object_id,server_type_id,attrid_fqdn,fqdn,"NULL",hostname)
+
         if server_type_id == 4:
             #get id of HW
             words = product_name.split()
             searchstring = vendor+"%"+"%".join(str(x) for x in words)
             hw_id = GetDictionaryId(searchstring)
-            #insert os and hw info
+            #insert hw info
             attr_id = GetAttributeId("HW type")
             if hw_id != None:
                 InsertAttribute(object_id,server_type_id,attr_id,"NULL",hw_id,hostname)
@@ -759,7 +808,7 @@ if dbresult.fetchone() == None:
                 if len(virtual_servers) != 0:
                     CleanVirtuals(object_id,virtual_servers)
                     for virtual_name in virtual_servers:
-                        virtual_id = GetObjectId(virtual_name)   
+                        virtual_id = GetObjectId(virtual_name)
                         if virtual_id != None:
                             LinkVirtualHypervisor(object_id,virtual_id)
 
@@ -790,7 +839,9 @@ if dbresult.fetchone() == None:
         #
         # hostname exist, what to do?
         #
-        print "Hostname %s already exist. I'm using service tag: %s" % (hostname,service_tag)
+        logging.error("Hostname %s already exists. I'm using service tag: %s" % (hostname,service_tag))
+        ec = 1
+
 else:
     #
     # service tag exist
@@ -820,19 +871,22 @@ else:
 
 
         # Insert attributes, OS info and waranty
-        #get id of OS
-        os_id = GetDictionaryId(os_searchstring)
         attr_id = GetAttributeId("SW type")
         if os_id != None:
             InsertAttribute(object_id,server_type_id,attr_id,"NULL",os_id,hostname)
+
+        # Insert FQDN value
+        attrid_fqdn = GetAttributeId("FQDN")
+        if fqdn != None and hostname != None:
+            InsertAttribute(object_id,server_type_id,attrid_fqdn,fqdn,"NULL",hostname)
 
         if server_type_id == 4:
             #get id of HW
             words = product_name.split()
             searchstring = vendor+"%"+"%".join(str(x) for x in words)
             hw_id = GetDictionaryId(searchstring)
-            
-            #insert os and hw info
+
+            #insert hw info
             attr_id = GetAttributeId("HW type")
             if hw_id != None:
                 InsertAttribute(object_id,server_type_id,attr_id,"NULL",hw_id,hostname)
@@ -855,7 +909,7 @@ else:
                 if len(virtual_servers) != 0:
                     CleanVirtuals(object_id,virtual_servers)
                     for virtual_name in virtual_servers:
-                        virtual_id = GetObjectId(virtual_name)   
+                        virtual_id = GetObjectId(virtual_name)
                         if virtual_id != None:
                             LinkVirtualHypervisor(object_id,virtual_id)
 
@@ -887,7 +941,7 @@ else:
         sql = "SELECT comment FROM Object WHERE id = %d" % (object_id)
         dbresult.execute(sql)
         result = dbresult.fetchone()
-    
+
         comment = ""
         if result[0] != None:
             comment = result[0]
@@ -896,13 +950,15 @@ else:
                 shutil.copy2(motd_file_original, motd_file)
             except IOError :
                 shutil.copy2(motd_file,motd_file_original)
-            
+
             motd_open_file = open(motd_file, "a")
             motd_open_file.write("\n\033[34m--- comment ---\033[33m\n\n" + comment + "\033[0m\n\n")
             motd_open_file.close()
 
     else:
         #Hostname is different
-        print "Service tag %s already exist, but hostname is different." % service_tag
+        logging.error("Service tag %s already exist, but hostname is different." % service_tag)
+        ec = 1
 
 db.close()
+sys.exit(ec)

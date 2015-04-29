@@ -3,5 +3,6 @@ rt-server-client TODO list
 
 - optimize code - working with database
 - check behavior with cisco switches
-- add support for other virtualization technologies (openvz, kvm, vmware)
-
+- add support for other virtualization technologies hypervisor hosts (openvz, kvm, vmware)
+- Actually handle "duplicate" systems rather than doing nothing
+- lib/ToolBox/dell/__init__.py should be updated with logic wrapped around the BeautifulSoup import to correctly select the module appropriate to the local system
