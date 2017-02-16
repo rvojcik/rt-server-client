@@ -1,0 +1,3 @@
+[submodule "lib/rtapi"]
+	path = lib/rtapi
+	url = https://github.com/rvojcik/rtapi.git
