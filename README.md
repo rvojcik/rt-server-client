@@ -41,6 +41,7 @@ Requirements
 
 Required
 
+    - rt-api project (used as submodule)
     - Python > 2.5.x (tested with 2.5.2, 2.7.3)
     - Python module Beautiful Soup (tested with bs3)
     - lsb-release (detection of Linux distribution and release)
@@ -59,6 +60,8 @@ You should install this application whare you want. I reccommend put it to /opt.
 
     cd /opt/
     git clone https://github.com/rvojcik/rt-server-client.git
+    cd rt-server-client/
+    git submodule update --init --recursive
     vim rt-server-client/conf/main.conf
     cd rt-server-client
     ./system-info.py

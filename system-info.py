@@ -48,7 +48,7 @@ import datetime
 import re
 import random
 import shutil
-
+import argparse
 #FOR MAC
 import fcntl
 import socket
@@ -63,18 +63,38 @@ sys.path.append(script_path + '/lib/')
 
 import ipaddr
 import MySQLdb
-from ToolBox import net, dell
+from ToolBox import net, dell, base
+import rtapi
 
 config_path = script_path + "/conf/"
 motd_file_original = "/etc/motd.ls.orig"
 motd_file = "/etc/motd"
 
-# Sleep for some seconds. When running on 200 hosts in same second, local dns should have a problem with it
-time.sleep(random.randint(1,12))
+# Default config file
+main_config = "main.conf"
+
+##
+## Parsing arguments
+##
+parser = argparse.ArgumentParser(
+    description= 'Server audit automation system for RackTables',
+    epilog='Created by Robert Vojcik <robert@vojcik.net>')
+
+parser.add_argument("-f", dest="force_init", default=False, action="store_true", help="Force initialization, automaticly rewrite hostname")
+parser.add_argument("-d", dest="debug_mode", default=False, action="store_true", help="Debug mode")
+
+args = parser.parse_args()
+##
+## END Parsing arguments
+##
+
+# Debug mode
+debug = base.Debug(args)
 
 
 try:
-    config_file = open(config_path + "main.conf")
+    config_file = open(config_path + main_config)
+    debug.print_message("Opening config: "+config_path+main_config)
 except IOError ,e:
     print("({})".format(e))
     sys.exit()
@@ -93,16 +113,6 @@ def getHwAddr(ifname):
     return ''.join(['%02x' % ord(char) for char in info[18:24]])
 #END
 
-def GenerateServiceTag(size):
-    """Service tag generator"""
-
-    letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    digits = "0123456789"
-    chars = letters + digits
-
-    service_tag = "".join(random.choice(chars) for x in range(size))
-
-    return service_tag
 
 def GetVirtualServers(virtualization):
     """Create list of virtual servers"""
@@ -127,8 +137,13 @@ def GetVirtualServers(virtualization):
     return virtuals
 
 
-# Get interface list into interfaces list
+# Sleep for some seconds. When running on 200 hosts in same second, local dns should have a problem with it
+if not args.debug_mode:
+    time.sleep(random.randint(1,12))
+
+# Get interface list into interfaces list and filter docker interfaces
 device_list = net.get_interfaces()
+debug.print_message("Device list: "+str(device_list))
 
 # Get ip address for each interface
 # Get connections from lldp
@@ -138,81 +153,105 @@ interfaces_ips = []
 interfaces_ips6 = []
 
 # Check for virtualization 
-
-# Default it's not hypervisor and no virtualization
-hypervisor = "no"
-server_type_id = 4
-
-# XEN
-if os.path.isdir('/proc/xen'):
+if not os.path.isdir('/proc/xen'):
+    #Je to server
+    server_type_id = 4
+    hypervisor = "no"
+    debug.print_message("Server is physical normal server")
+else:
     if not os.path.isfile('/proc/xen/xenbus'):
-        #It is xen virtual server
-        hypervisor = "no"
+        #Je to virtual
         server_type_id = 1504
+        hypervisor = "no"
+        debug.print_message("Server is virtual")
     else:
-        hypervisor = "yes" 
-        virtual_servers = GetVirtualServers('xen')
-    
-# OpenVZ
-if os.path.isdir('/proc/vz'):
-    #It is OpenVZ technology
-    if os.path.isfile('/proc/vz/veinfo'):
-        #It is OpenVZ Hypervisor
+        #Je to hypervisor
+        server_type_id = 4
         hypervisor = "yes"
-        virtual_servers = GetVirtualServers('vz')
-    else:
-        hypervisor = "no"
-        server_type_id = 1504
+        virtual_servers = GetVirtualServers()
+        debug.print_message("Server is hypervisor")
+        debug.print_message("Virtuals: "+str(virtual_servers))
+
 
 product_name = ''
-service_tag = ''
 vendor = ''
+hostname = platform.node()
 if server_type_id == 4:
     # Get service tag
     # Server type, model
-    getsystemid = commands.getoutput('getSystemId 2>/dev/null')
+    product_name = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -m')
+    debug.print_message("Product name: "+product_name)
 
-    if re.findall('\nProduct Name:.*',getsystemid):
-        product_name = " ".join(str(x) for x in re.findall('\nProduct Name:.*',getsystemid)[0].split()[2:])
-    else:
-        product_name = "unknown"
+    service_tag = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -t')
+    debug.print_message("Service Tag: "+service_tag)
 
-    if re.findall('\nService Tag:.*',getsystemid):
-        service_tag = re.findall('\nService Tag:.*',getsystemid)[0].split()[2]
-    else:
-        service_tag = "unknown"
+    vendor = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -v')
+    debug.print_message("Vendor: "+vendor)
 
-    if re.findall('\nVendor:.*',getsystemid):
-        vendor = re.findall('\nVendor:.*',getsystemid)[0].split()[1]
-    else:
-        vendor = "unknown"
 
-    if ( vendor == "Supermicro" or vendor == "unknown" ):
-    # There is no way to get uniq identificator of supermicro servers, we must generate some
-        stag_path = '/var/opt/service_tag_generated.txt'
+# Workaround for VPS and servicetag
+elif server_type_id == 1504:
+    service_tag = "VPS-"+hostname
+    debug.print_message("VPS Service Tag override: "+service_tag)
+else:
+    service_tag = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -t')
 
-        if os.path.isfile(stag_path):
-            try:
-                stag_file = open(stag_path)
-            except IOError ,e:
-                print("({})".format(e))
-                sys.exit()
-        
-            service_tag = stag_file.read()
-        else:
-            service_tag = GenerateServiceTag(10)
+# Get hostname
+if init_run == "yes":
+    hostname = init_prefix + "-" + service_tag
+debug.print_message("Hostname: "+hostname)
 
-            stag_file = open(stag_path, 'w')
-            stag_file.write(service_tag)
-            stag_file.close()
+# CPU information
+# Read /proc/cpuinfo into variable
+cpu_proc = open('/proc/cpuinfo')
+file_c = cpu_proc.read()
+cpu_proc.close()
 
+# Get number of logical CPUs
+cpu_logical_num = file_c.count('processor')
+debug.print_message("Logical CPU num: "+str(cpu_logical_num))
+
+# Get CPU Model Name
+cpu_model_name = re.sub(' +',' ',re.findall('model name.*',file_c)[0].split(': ')[1])
+debug.print_message("CPU model name: "+cpu_model_name)
+
+# Physical CPU information
+lscpu_output = commands.getstatusoutput('lscpu')
+if lscpu_output[0] == 0:
+    lscpu = lscpu_output[1]
+    try:
+        cpu_num = int(re.findall('CPU socket.*',lscpu)[0].split(':')[1].strip())
+    except:
+        cpu_num = int(re.findall('Socket\(s\).*',lscpu)[0].split(':')[1].strip())
+    cpu_cores = int(re.findall('Core\(s\) per socket.*',lscpu)[0].split(':')[1].strip())
+    cpu_mhz = int(re.findall('CPU MHz.*',lscpu)[0].split(':')[1].strip().split('.')[0])
+else:
+    cpu_num = ""
+    cpu_cores = ""
+    cpu_mhz = ""
+
+debug.print_message("CPU NUM, CPU Cores, CPU Mhz: %s, %s, %s" % (cpu_num, cpu_cores, cpu_mhz))
+
+# Get Memory info
+meminfo = open('/proc/meminfo')
+file_c = meminfo.read()
+meminfo.close()
+memory_mb = int(file_c.split()[1]) / 1024
+debug.print_message("Memory MB: %s" % (str(memory_mb)))
+
+# Network Interfaces LLDP Connections
 for interface in device_list:
+    debug.print_message("Processing interface " + interface)
     # Default values
     switch_name = ''
     switch_port = ''
     # Get ip addresses
     interfaces_ips.append(net.get_ip4_addr(interface))
+    debug.print_message("IPv4: "+str(interfaces_ips))
+
     interfaces_ips6.append(net.get_ip6_addr(interface))
+    debug.print_message("IPv6: "+str(interfaces_ips6))
+
     # Get lldp
     lldp_output = commands.getoutput('lldpctl -f keyvalue ' + interface)
 
@@ -234,32 +273,32 @@ for interface in device_list:
     
     #add connection to list
     connection = [switch_name, switch_port]
+    debug.print_message("Connection: "+str(connection))
     interface_connections.append(connection)
 
 
 # OS, type, release
 os_distribution, os_version, os_codename = platform.dist()
+
 # Stupid debian, empty os_codename
 if os_codename == '':
     for line in commands.getoutput('lsb_release -a').split('\n'):
         if line.find('Codename:') > -1:
             os_codename = line.split()[1]
-
-if os_distribution == "Ubuntu":
-    os_searchstring = os_distribution+"%"+os_version
-else:
-    os_searchstring = os_distribution+"%"+os_codename
+debug.print_message("os_dist, os_version, os_codename: " + str([os_distribution, os_version, os_codename]))
 
 # Get Drac IP
-output = commands.getstatusoutput('omreport chassis remoteaccess config=nic')
+management_ip_commands = ['omreport chassis remoteaccess config=nic' , 'ipmitool lan print']
+drac_ip = ''
+for mgmcommand in management_ip_commands:
+    output = commands.getstatusoutput(mgmcommand)
+    if output[0] == 0:
+        drac_ip = re.findall('[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}',output[1])[0]
+        break
+debug.print_message("Drac IP: "+drac_ip)
 
-if output[0] == 0:
-    drac_ip = re.findall('[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}',output[1])[0]
-else:
-    drac_ip = ''
 
 # Get label from Drac (display)
-
 output = commands.getstatusoutput('omreport chassis frontpanel')
 
 if output[0] == 0:
@@ -273,517 +312,144 @@ if output[0] == 0:
 else:
     update_label = "no"
     label = ""
+debug.print_message("label, update_label: %s %s" % (label, update_label))
+
+
+# If hostname and label not match, try to configure LCD
+if hostname != label:
+    if commands.getstatusoutput('omconfig chassis frontpanel config=custom lcdindex=1 text="' + hostname + '"')[0] == 0:
+        label = hostname
+        update_label = "yes"
+debug.print_message("label, update_label: %s %s" % (label, update_label))
 
 # Get support and waranty for service tag
-if service_tag == '':
-    support_type = ''
-    support_ends = ''
-else:
-    dell_list = dell.get_waranty_info(service_tag)
-    if dell_list != None:
-        support_type, support_ends = dell_list
-    else:
-        support_type = ''
-        support_ends = ''
+#if service_tag == '':
+#    support_type = ''
+#    support_ends = ''
+#else:
+#    dell_list = dell.get_waranty_info(service_tag)
+#    if dell_list != None:
+#        support_type, support_ends = dell_list
+#    else:
+#        support_type = ''
+#        support_ends = ''
 
-# Get hostname
-hostname = platform.node()
 # Get Kernel version
 kernel_version = platform.release()
-
-# Workaround for VPS and servicetag
-if server_type_id == 1504:
-    service_tag = "VPS-"+hostname
-
-########################
-## Debug : Print outputs
-#print "Hostname: " + hostname
-#print "OS info: " +os_distribution+","+os_version+","+os_codename
-#print "Kernel: " +kernel_version
-#print "Service-Tag: " +service_tag
-#print "Server: "+vendor+" "+product_name
-#print "Support: "+support_type+", to "+support_ends
-#print "Interfaces: "+" ".join(str(x) for x in device_list[0:])
-#print "IPs: "
-#count = 0
-#for interface in device_list:
-#    print interface
-#    print "MAC: "
-#    print getHwAddr(interface)
-#    print "IPv4: "
-#    print interfaces_ips[count]
-#    print "IPv6: "
-#    print interfaces_ips6[count]
-#    count += 1
-#
-#print "Interfaces Connections:"
-#count = 0
-#for interface in interface_connections:
-#    print device_list[count]
-#    print interface
-#    count += 1
-
-###################
-# Database part
-
-## Some functions our racktables database
-def InsertLog(object_id,content):
-    """Function for attaching log information to specific object"""
-    sql = "INSERT INTO ObjectLog (object_id,user,date,content) VALUES (%d,'script',now(),'%s')" % (object_id, content)
-    dbresult.execute(sql)
-    db.commit()
-
-def InsertAttribute(object_id,object_tid,attr_id,string_value,uint_value,name):
-    """Add or Update object attribute, history logging supported"""
-    
-    # Check if attribute exist
-    sql = "SELECT string_value,uint_value FROM AttributeValue WHERE object_id = %d AND object_tid = %d AND attr_id = %d" % (object_id, object_tid, attr_id)
-    dbresult.execute(sql)
-    result = dbresult.fetchone()
-    old_string_value = None;
-
-    if result != None:
-        # Check if attribute value is same and determine attribute type
-        old_string_value = result[0]
-        old_uint_value = result[1]
-        same_flag = "no"
-        attribute_type = "None"
-
-    if old_string_value != None:
-        attribute_type = "string"
-        old_value = old_string_value
-        if old_string_value == string_value:
-            same_flag = "yes"
-        elif old_uint_value != None:
-            attribute_type = "uint"
-            old_value = old_uint_value
-            if old_uint_value == uint_value:
-                same_flag = "yes"
-
-        # If exist, update value
-        new_value = ''
-        if same_flag == "no":
-            if attribute_type == "string":
-                sql = "UPDATE AttributeValue SET string_value = '%s' WHERE object_id = %d AND attr_id = %d AND object_tid = %d" % (string_value, object_id, attr_id, object_tid)
-                new_value = string_value
-            if attribute_type == "uint":
-                sql = "UPDATE AttributeValue SET uint_value = %d WHERE object_id = %d AND attr_id = %d AND object_tid = %d" % (uint_value, object_id, attr_id, object_tid)
-                new_value = uint_value
-
-            dbresult.execute(sql)
-            db.commit()
-
-    else:
-        # Attribute not exist, insert new
-        if string_value == "NULL":
-            sql = "INSERT INTO AttributeValue (object_id,object_tid,attr_id,uint_value) VALUES (%d,%d,%d,%d)" % (object_id,object_tid,attr_id,uint_value)
-        else:
-            sql = "INSERT INTO AttributeValue (object_id,object_tid,attr_id,string_value) VALUES (%d,%d,%d,'%s')" % (object_id,object_tid,attr_id,string_value)
-        dbresult.execute(sql)
-        db.commit()
-
-def GetAttributeId(searchstring):
-    """Search database using searchstring and return atribute id"""
-    sql = "SELECT id FROM Attribute WHERE name LIKE '%"+searchstring+"%'"
-    dbresult.execute(sql)
-  
-    result = dbresult.fetchone()
-    if result != None:
-        getted_id = result[0]
-    else:
-        getted_id = None
-
-    return getted_id
-
-def GetInterfaceName(object_id,interface_id):
-    """Find name of specified interface"""
-    #Get interface id
-    sql = "SELECT name FROM Port WHERE object_id = %d AND name = %d" % (object_id, interface_id)
-    dbresult.execute(sql)
-    result = dbresult.fetchone()
-    if result != None:
-        port_name = result[0]
-    else:
-        port_name = None
-
-    return port_name
-
-def GetInterfaceId(object_id,interface):
-    """Find id of specified interface"""
-    #Get interface id
-    sql = "SELECT id,name FROM Port WHERE object_id = %d AND name = '%s'" % (object_id, interface)
-    dbresult.execute(sql)
-    result = dbresult.fetchone()
-    if result != None:
-        port_id = result[0]
-    else:
-        port_id = None
-
-    return port_id
-
-def GetObjectName(object_id):
-    """Find object name in database"""
-    #Get interface id
-    sql = "SELECT name FROM Object WHERE id = %d" % (object_id)
-    dbresult.execute(sql)
-    result = dbresult.fetchone()
-    if result != None:
-        object_name = result[0]
-    else:
-        object_name = None
-
-    return object_name
-
-def GetObjectId(name):
-    """Find object id in database"""
-    #Get interface id
-    sql = "SELECT id FROM Object WHERE name = '%s'" % (name)
-    dbresult.execute(sql)
-    result = dbresult.fetchone()
-    if result != None:
-        object_id = result[0]
-    else:
-        object_id = None
-
-    return object_id
-
-def GetDictionaryId(searchstring):
-    """Search racktables dictionary using searchstring and return id of dictionary element"""
-    sql = "SELECT dict_key FROM Dictionary WHERE dict_value LIKE '%"+searchstring+"%'"
-    dbresult.execute(sql)
-
-    result = dbresult.fetchone()
-    if result != None:
-        getted_id = result[0]
-    else:
-        getted_id = None
-
-    return getted_id
-
-def UpdateNetworkInterface(object_id,interface):
-    """Add network interfece to object if not exist"""
-    # Get MAC for ETHx
-    mac = getHwAddr(interface)
-    sql = "SELECT id,name,l2address FROM Port WHERE object_id = %d AND name = '%s' AND l2address = '%s'" % (object_id, interface,mac)
-    dbresult.execute(sql)
-    result = dbresult.fetchone()
-    sql1 = "SELECT id,name,l2address FROM Port WHERE object_id = %d AND name = '%s'" % (object_id, interface)
-    dbresult.execute(sql1)
-    result1 = dbresult.fetchone()
-    if result == None:
-        if result1 != None:
-            sql = "DELETE FROM Port WHERE object_id = %d AND name = '%s'" % (object_id, interface)
-	    dbresult.execute(sql)
-            db.commit()
-        sql = "INSERT INTO Port (object_id,name,iif_id,type,l2address) VALUES (%d,'%s',1,24,'%s')" % (object_id,interface,mac)
-        dbresult.execute(sql)
-        db.commit()
-        port_id = dbresult.lastrowid
-    else:
-        #
-        port_id = result[0]
-
-
-    return port_id
-
-def LinkNetworkInterface(object_id,interface,switch_name,interface_switch):
-    """Link two devices togetger"""
-    #Get interface id
-    port_id = GetInterfaceId(object_id,interface)
-    if port_id != None:
-        #Get switch object ID
-        switch_object_id = GetObjectId(switch_name)
-        if switch_object_id != None:
-            switch_port_id = GetInterfaceId(switch_object_id,interface_switch)
-            if switch_port_id != None:
-                sql = "SELECT portb FROM Link WHERE porta = %d OR portb = %d" % (port_id, port_id)
-                dbresult.execute(sql)
-                result = dbresult.fetchone()
-                if result == None:
-                    #Insert new connection
-                    sql = "INSERT INTO Link (porta,portb) VALUES (%d,%d)" % (port_id, switch_port_id)
-                    dbresult.execute(sql)
-                    db.commit()
-                    resolution = True
-                else:
-                    #Update old connection
-                    old_switch_port_id = result[0]
-                    if old_switch_port_id != switch_port_id:
-                        sql = "UPDATE Link set portb = %d, porta=%d WHERE porta = %d OR portb = %d" % (switch_port_id, port_id, port_id, port_id)
-                        dbresult.execute(sql)
-                        db.commit()
-                        sql = "SELECT Port.name as port_name, Object.name as obj_name FROM Port INNER JOIN Object ON Port.object_id = Object.id WHERE Port.id = %d" % old_switch_port_id
-                        dbresult.execute(sql)
-                        result = dbresult.fetchone()
-                        old_switch_port, old_device_link = result
-
-                        text = "Changed link from %s %s -> %s %s" % (old_device_link,old_switch_port)
-                        InsertLog(object_id,text)
-                        resolution = True
-                    resolution = None
-
-            else:
-                resolution = None
-        else:
-            resolution = None
-
-    else:
-        resolution = None
-
-    return resolution
-
-def InterfaceAddIpv4IP(object_id,device,ip):
-    """Add/Update IPv4 IP on interface"""
-
-    sql = "SELECT INET_NTOA(ip) from IPv4Allocation WHERE object_id = %d AND name = '%s'" % (object_id,device)
-    dbresult.execute(sql)
-    result = dbresult.fetchall()
-
-    if result != None:
-        old_ips = result
-    
-    is_there = "no"
-
-    for old_ip in old_ips:
-        if old_ip[0] == ip:
-            is_there = "yes"
-
-    if is_there == "no":
-        sql = "INSERT INTO IPv4Allocation (object_id,ip,name) VALUES (%d,INET_ATON('%s'),'%s')" % (object_id,ip,device)
-        dbresult.execute(sql)
-        db.commit()
-        text = "Added IP %s on %s" % (ip,device)
-        InsertLog(object_id,text)
-
-def InterfaceAddIpv6IP(object_id,device,ip):
-    """Add/Update IPv6 IP on interface"""
-    #Create address object using ipaddr 
-    addr6 = ipaddr.IPAddress(ip)
-    #Create IPv6 format for Mysql
-    ip6 = "".join(str(x) for x in addr6.exploded.split(':'))
-
-    sql = "SELECT HEX(ip) FROM IPv6Allocation WHERE object_id = %d AND name = '%s'" % (object_id, device)
-    dbresult.execute(sql)
-    result = dbresult.fetchall()
-    
-    if result != None:
-        old_ips = result
-
-    is_there = "no"
-
-    for old_ip in old_ips:
-        if old_ip[0] != ip6:
-            is_there = "yes"
-
-    if is_there == "no":
-        sql = "INSERT INTO IPv6Allocation (object_id,ip,name) VALUES (%d,UNHEX('%s'),'%s')" % (object_id,ip6,device)
-        dbresult.execute(sql)
-        db.commit()
-        text = "Added IPv6 IP %s on %s" % (ip,device)
-        InsertLog(object_id,text)
-
-def CleanVirtuals(object_id,virtual_servers):
-    """Clean dead virtuals from hypervisor"""
-
-    sql = "SELECT child_entity_id FROM EntityLink WHERE parent_entity_id = %d" % object_id
-    dbresult.execute(sql)
-
-    result = dbresult.fetchall()
-
-    if result != None:
-        old_virtuals_ids = result
-        delete_virtual_id = []
-        new_virtuals_ids = []
-        # Translate names into ids
-        for new_virt in virtual_servers:
-            new_id = GetObjectId(new_virt)
-            if new_id != None:
-                new_virtuals_ids.append(new_id)
-
-        for old_id in old_virtuals_ids:
-            try:
-                test = new_virtuals_ids.index(old_id[0])
-            except ValueError:
-                delete_virtual_id.append(old_id[0]) 
-    if len(delete_virtual_id) != 0:
-        for virt_id in delete_virtual_id:
-
-            sql = "DELETE FROM EntityLink WHERE parent_entity_id = %d AND child_entity_id = %d" % (object_id,virt_id)
-            dbresult.execute(sql)
-            db.commit()
-            virt_name = GetObjectName(virt_id)
-            logstring = "Odstraneny virtual %s" % virt_name
-            InsertLog(object_id,logstring)
-
-def CleanIPAddresses(object_id,ip_addresses,device):
-    """Clean unused ip from object"""
-
-    sql = "SELECT INET_NTOA(ip) FROM IPv4Allocation WHERE object_id = %d AND name = '%s'" % (object_id, device)
-    dbresult.execute(sql)
-
-    result = dbresult.fetchall()
-
-    if result != None:
-        old_ips = result
-        delete_ips = []
-
-        for old_ip in old_ips:
-            try:
-                test = ip_addresses.index(old_ip[0])
-            except ValueError:
-                delete_ips.append(old_ip[0]) 
-    if len(delete_ips) != 0:
-        for ip in delete_ips:
-            sql = "DELETE FROM IPv4Allocation WHERE ip = INET_ATON('%s') AND object_id = %d AND name = '%s'" % (ip,object_id,device)
-            dbresult.execute(sql)
-            db.commit()
-            logstring = "Removed IP %s from %s" % (ip,device)
-            InsertLog(object_id,logstring)
-
-def CleanIPv6Addresses(object_id,ip_addresses,device):
-    """Clean unused ipv6 from object"""
-
-    sql = "SELECT HEX(ip) FROM IPv6Allocation WHERE object_id = %d AND name = '%s'" % (object_id,device)
-    dbresult.execute(sql)
-
-    result = dbresult.fetchall()
-
-    if result != None:
-        old_ips = result
-        delete_ips = []
-        new_ip6_ips = []
-
-        #We must prepare ipv6 addresses into same format for compare
-        for new_ip in ip_addresses:
-            converted = ipaddr.IPAddress(new_ip).exploded.lower()
-            new_ip6_ips.append(converted)
-
-
-        for old_ip_hex in old_ips:
-            try:
-                #First we must construct IP from HEX
-                tmp = re.sub("(.{4})","\\1:", old_ip_hex[0], re.DOTALL)
-                #Remove last : and lower string
-                old_ip = tmp[:len(tmp)-1].lower()
-
-                test = new_ip6_ips.index(old_ip)
-
-            except ValueError:
-                delete_ips.append(old_ip)
-
-    if len(delete_ips) != 0:
-        for ip in delete_ips:
-            db_ip6_format = "".join(str(x) for x in ip.split(':')) 
-            sql = "DELETE FROM IPv6Allocation WHERE ip = UNHEX('%s') AND object_id = %d AND name = '%s'" % (db_ip6_format,object_id,device)
-            dbresult.execute(sql)
-            db.commit()
-            logstring = "Removed IP %s from %s" % (ip,device)
-            InsertLog(object_id,logstring)
-
-def LinkVirtualHypervisor(object_id,virtual_id):
-    """Assign virtual server to correct hypervisor"""
-    sql = "SELECT child_entity_id FROM EntityLink WHERE parent_entity_id = %d AND child_entity_id = %d" % (object_id,virtual_id)
-    dbresult.execute(sql)
-
-    result = dbresult.fetchone()
-
-    if result == None:
-        sql = "INSERT INTO EntityLink (parent_entity_type, parent_entity_id, child_entity_type, child_entity_id) VALUES ('object',%d,'object',%d)" % (object_id, virtual_id)
-        dbresult.execute(sql)
-        db.commit()
-        text = "Linked virtual %s with hypervisor" % GetObjectName(virtual_id)
-        InsertLog(object_id,text)
-
+debug.print_message("Kernel: "+kernel_version)
 
 ## Main Database part
 
 # Create connection to database
 try:
     # Create connection to database
+    debug.print_message("Database connection [host, port, passwd, database, user] = [ %s, %s, %s, %s, %s ]" % (config.get('mysqldb','host'),"3306", "xxxxxx",config.get('mysqldb','db'),config.get('mysqldb','user'))) 
     db = MySQLdb.connect(host=config.get('mysqldb','host'),port=3306, passwd=config.get('mysqldb','password'),db=config.get('mysqldb','db'),user=config.get('mysqldb','user'))
 except MySQLdb.Error ,e:
     print "Error %d: %s" % (e.args[0],e.args[1])
     sys.exit(1)
-#set cursor for db
-dbresult = db.cursor()
 
 
+# Initialize rtapi object
+debug.print_message("Initializing RT Api object")
+rtobject = rtapi.RTObject(db)
 
-dbresult.execute('SELECT name FROM Object WHERE asset_no = \''+service_tag+'\'')
 
-if dbresult.fetchone() == None:
+debug.print_message("STARTING MAIN DATABASE INSERTION/UPDATE")
+if not rtobject.ObjectExistST(service_tag):
     #
     # service tag not exist
     #
-    dbresult.execute('select name from Object where name = \''+hostname+'\'')
-    if dbresult.fetchone() == None:
+    debug.print_message("Service tag not exist in database")
+    if not rtobject.ObjectExistName(hostname):
         # hostname not exist = insert new server Object
-        sql = "INSERT INTO Object (name,objtype_id,asset_no,label) VALUES ('%s',%d,'%s','%s')" % (hostname,server_type_id,service_tag,label)
-        dbresult.execute(sql)
-        db.commit()
-        object_id = dbresult.lastrowid
+        rtobject.AddObject(hostname,server_type_id,service_tag,label)
+        object_id = rtobject.GetObjectId(hostname)
+        debug.print_message("Added new object to database %s with ID %s" % (str([hostname,server_type_id,service_tag,label]), str(object_id)))
 
         # Insert attributes, OS info and waranty
         #get id of OS
-        os_id = GetDictionaryId(os_searchstring)
-        attr_id = GetAttributeId("SW type")
+        searchstring = os_distribution+"%"+os_codename
+        os_id = rtobject.GetDictionaryId(searchstring)
+        attr_id = rtobject.GetAttributeId("SW type")
+        debug.print_message("SW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(os_id), str(attr_id)))
         if os_id != None:
-            InsertAttribute(object_id,server_type_id,attr_id,"NULL",os_id,hostname)
+            rtobject.InsertAttribute(object_id,server_type_id,attr_id,"NULL",os_id,hostname)
+            debug.print_message("Inserting OS attribute: obj_id=%d srv_type_id=%d attr_id=%d os_id=%d hostname=%s" % (object_id,server_type_id,attr_id,os_id,hostname))
+        else:
+            debug.print_message("OS id not found in racktables")
 
         
         if server_type_id == 4:
             #get id of HW
             words = product_name.split()
             searchstring = vendor+"%"+"%".join(str(x) for x in words)
-            hw_id = GetDictionaryId(searchstring)
+            hw_id = rtobject.GetDictionaryId(searchstring)
             #insert os and hw info
-            attr_id = GetAttributeId("HW type")
+            attr_id = rtobject.GetAttributeId("HW type")
+            debug.print_message("HW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(hw_id), str(attr_id)))
             if hw_id != None:
-                InsertAttribute(object_id,server_type_id,attr_id,"NULL",hw_id,hostname)
+                rtobject.InsertAttribute(object_id,server_type_id,attr_id,"NULL",hw_id,hostname)
+                debug.print_message("Inserting HW attribute: obj_id=%d srv_type_id=%d attr_id=%d hw_id=%d hostname=%s" % (object_id,server_type_id,attr_id,hw_id,hostname))
+            else:
+                debug.print_message("HW id not found in racktables")
 
-            ## insert waranty info
-            if len(re.findall('[0-9]{0,2}\/[0-9]{0,2}\/[0-9]{4}', support_ends)):
-                attid_hw_warranty = GetAttributeId("HW warranty expiration")
-                attid_hw_support = GetAttributeId("HW support type")
-                uint_value = time.mktime(datetime.datetime.strptime(support_ends, "%m/%d/%Y").timetuple())
-                #Insert HW warranty expiration
-                InsertAttribute(object_id,server_type_id,attid_hw_warranty,"NULL",uint_value,hostname)
-                #Insert HW warranty type
-                InsertAttribute(object_id,server_type_id,attid_hw_support,support_type,"NULL",hostname)
+
+            # Insert CPU and Memory Information
+            debug.print_message("Inserting CPU attribute information")
+            if cpu_model_name != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPU Model"),cpu_model_name,"NULL",hostname)
+            if cpu_logical_num != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPUs Logical"),"NULL",cpu_logical_num,hostname)
+            if cpu_num != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPUs"),"NULL",cpu_num,hostname)
+            if cpu_cores != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("Cores per CPU"),"NULL",cpu_cores,hostname)
+            if cpu_mhz != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPU, MHz"),"NULL",cpu_mhz,hostname)
+            if memory_mb != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("RAM Mem, MB"),"NULL",memory_mb,hostname)
 
 
             if hypervisor == "yes":
                 searchstring = "Hypervisor"
-                attid_hyp = GetAttributeId(searchstring)
-                InsertAttribute(object_id,server_type_id,attid_hyp,'NULL',1501,hostname)
+                attid_hyp = rtobject.GetAttributeId(searchstring)
+                rtobject.InsertAttribute(object_id,server_type_id,attid_hyp,'NULL',1501,hostname)
+                debug.print_message("Hypervisor, searching for: %s , Found: %s" %(searchstring, str(attid_hyp)))
                 if len(virtual_servers) != 0:
-                    CleanVirtuals(object_id,virtual_servers)
+                    rtobject.CleanVirtuals(object_id,virtual_servers)
                     for virtual_name in virtual_servers:
-                        virtual_id = GetObjectId(virtual_name)   
+                        virtual_id = rtobject.GetObjectId(virtual_name)   
                         if virtual_id != None:
-                            LinkVirtualHypervisor(object_id,virtual_id)
+                            rtobject.LinkVirtualHypervisor(object_id,virtual_id)
+                            debug.print_message("Virtual Linking id:%s with %s(%s)" %(str(object_id), str(virtual_id), str(virtual_name)))
+
 
             if len(drac_ip) != 0:
-                UpdateNetworkInterface(object_id,'drac')
-                InterfaceAddIpv4IP(object_id,'drac',drac_ip)
+                rtobject.UpdateNetworkInterface(object_id,'drac')
+                rtobject.InterfaceAddIpv4IP(object_id,'drac',drac_ip)
+                debug.print_message("Inserting Drac IP")
 
 
         for device in device_list:
             #Add/update network interface
-            port_id = UpdateNetworkInterface(object_id,device)
+            port_id = rtobject.UpdateNetworkInterface(object_id,device)
             #Add network connections
             if interface_connections[device_list.index(device)] != '':
-                LinkNetworkInterface(object_id,device,interface_connections[device_list.index(device)][0],interface_connections[device_list.index(device)][1])
+                rtobject.LinkNetworkInterface(object_id,device,interface_connections[device_list.index(device)][0],interface_connections[device_list.index(device)][1])
             #Add IPv4 ips
             if interfaces_ips[device_list.index(device)] != '':
                 for ip in interfaces_ips[device_list.index(device)]:
-                    InterfaceAddIpv4IP(object_id,device,ip)
+                    rtobject.InterfaceAddIpv4IP(object_id,device,ip)
             #Add IPv6 ips
             if interfaces_ips6[device_list.index(device)] != '':
                 for ip in interfaces_ips6[device_list.index(device)]:
-                    InterfaceAddIpv6IP(object_id,device,ip)
+                    rtobject.InterfaceAddIpv6IP(object_id,device,ip)
 
-
+        # Set Installation Date 
+        rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("Installation Date"),"NULL",int(time.time()),hostname)
+        rtobject.InsertLog(object_id, "Server-Audit insert instalation date")
+        debug.print_message("Inserting installation date: "+str(time.time()))
 
 
     else:
@@ -791,118 +457,196 @@ if dbresult.fetchone() == None:
         # hostname exist, what to do?
         #
         print "Hostname %s already exist. I'm using service tag: %s" % (hostname,service_tag)
+        debug.print_message("Hostname %s already exist. My Service Tag is %s" % (hostname,service_tag))
 else:
     #
     # service tag exist
     #
     #check if hostname is the same
-    dbresult.execute('SELECT NAME FROM Object WHERE name = \''+hostname+'\'')
-    if dbresult.fetchone() != None:
-        # hostname exist and service tag is same, update info
-        sql = "SELECT id,label FROM Object WHERE name = '%s' AND asset_no = '%s'" % (hostname,service_tag)
-        dbresult.execute(sql)
-        result = dbresult.fetchone()
+    if (rtobject.ObjectExistName(hostname)) or (args.force_init) :
 
-        if result != None:
-            object_id = result[0]
-            object_label = result[1]
+        if args.force_init:
+            debug.print_message("Force initialization enabled")
+            debug.print_message("Updating hostname")
+            rtobject.UpdateObjectName(rtobject.GetObjectId(rtobject.GetObjectNameByAsset(service_tag)), hostname)
         else:
+            # hostname exist and service tag is same, update info
+            debug.print_message("Hostname already in DB, service tag is matching. Updating information in DB")
+
+        if rtobject.ObjectExistSTName(hostname, service_tag):
+            object_id = rtobject.GetObjectId(hostname)
+            object_label = rtobject.GetObjectLabel(object_id)
+            debug.print_message("Object id is: %s and label %s" %(str(object_id), object_label))
+        else:
+            print "Can't do it. Hostname %s and service-tag %s already exist, but does not belong to the same server"% (hostname, service_tag)
+            debug.print_message("Can't do it. Hostname %s and service-tag %s already exist, but does not belong to the same server"% (hostname, service_tag))
             sys.exit(1)
+
+        # Update Zaloha attribute
+        if args.force_init:
+            debug.print_message("Updating Zaloha attribute")
+            rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("Zaloha"),'NULL',1500,hostname)
+
 
         #Update label if it's not same
         if update_label == "yes":
             if label != object_label:
-                sql = "UPDATE Object SET label = '%s' where id = %d" % (label, object_id)
-                dbresult.execute(sql)
-                db.commit()
+                rtobject.UpdateObjectLabel(object_id, label)
                 logstring = "Label changed %s -> %s" % (object_label,label)
-                InsertLog(object_id,logstring)
+                rtobject.InsertLog(object_id,logstring)
+                debug.print_message("Updating old label ( %s ) with new ( %s )" %(object_label, label))
+            else:
+                debug.print_message("Label is same, skip update")
 
+        # Set Installation date if it's blank
+        result = rtobject.GetAttributeValue(object_id, rtobject.GetAttributeId("Installation Date"))
+        if result == None:
+            rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("Installation Date"),"NULL",int(time.time()),hostname)
+            rtobject.InsertLog(object_id, "Server-Audit insert instalation date")
+            debug.print_message("Installation date is blank, setting actual time")
 
         # Insert attributes, OS info and waranty
         #get id of OS
-        os_id = GetDictionaryId(os_searchstring)
-        attr_id = GetAttributeId("SW type")
+        searchstring = os_distribution+"%"+os_codename
+        os_id = rtobject.GetDictionaryId(searchstring)
+        attr_id = rtobject.GetAttributeId("SW type")
+        debug.print_message("SW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(os_id), str(attr_id)))
         if os_id != None:
-            InsertAttribute(object_id,server_type_id,attr_id,"NULL",os_id,hostname)
+            rtobject.InsertAttribute(object_id,server_type_id,attr_id,"NULL",os_id,hostname)
+            debug.print_message("Updating SW Type")
+
+        #Insert kernel version atributes
+        if kernel_version != "":
+            attr_id = rtobject.GetAttributeId("Kernel")
+            kernel_id=rtobject.GetDictionaryId(kernel_version)
+            if kernel_id == None:
+                #Have to insert kernel version into dictionary
+                debug.print_message("Inseting new kernel version to dictionary: %s"% str(kernel_version))
+                # kernels dictionary ahs ID 10003
+                rtobject.InsertDictionaryValue(10003,str(kernel_version))
+            kernel_id=rtobject.GetDictionaryId(kernel_version)    
+            #log kernel change, and update RT
+            if rtobject.GetAttributeValue(object_id, attr_id) != None:
+                last_kernel_id = rtobject.GetAttributeValue(object_id, attr_id)[1]
+                last_kernel_version = rtobject.GetDictionaryValueById(last_kernel_id)
+            else: 
+                last_kernel_id = ""
+                last_kernel_version = ""
+            if last_kernel_id != kernel_id:
+                logstring = "Kernel changed %s -> %s" % (last_kernel_version,kernel_version)
+                rtobject.InsertLog(object_id,logstring)
+                rtobject.InsertAttribute(object_id,server_type_id,attr_id,"NULL",kernel_id,hostname)
 
         if server_type_id == 4:
             #get id of HW
             words = product_name.split()
             searchstring = vendor+"%"+"%".join(str(x) for x in words)
-            hw_id = GetDictionaryId(searchstring)
-            
+            hw_id = rtobject.GetDictionaryId(searchstring)
             #insert os and hw info
-            attr_id = GetAttributeId("HW type")
+            attr_id = rtobject.GetAttributeId("HW type")
+            debug.print_message("HW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(hw_id), str(attr_id)))
             if hw_id != None:
-                InsertAttribute(object_id,server_type_id,attr_id,"NULL",hw_id,hostname)
+                rtobject.InsertAttribute(object_id,server_type_id,attr_id,"NULL",hw_id,hostname)
+                debug.print_message("Updating HW Type")
 
-            ## insert waranty info
-            if len(re.findall('[0-9]{0,2}\/[0-9]{0,2}\/[0-9]{4}', support_ends)):
-                attid_hw_warranty = GetAttributeId("HW warranty expiration")
-                attid_hw_support = GetAttributeId("HW support type")
-                uint_value = time.mktime(datetime.datetime.strptime(support_ends, "%m/%d/%Y").timetuple())
-                #Insert HW warranty expiration
-                InsertAttribute(object_id,server_type_id,attid_hw_warranty,"NULL",uint_value,hostname)
-                #Insert HW warranty type
-                InsertAttribute(object_id,server_type_id,attid_hw_support,support_type,"NULL",hostname)
 
+            # Insert CPU and Memory Information
+            debug.print_message("Updating CPU information attributes")
+            if cpu_model_name != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPU Model"),cpu_model_name,"NULL",hostname)
+            if cpu_logical_num != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPUs Logical"),"NULL",cpu_logical_num,hostname)
+            if cpu_num != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPUs"),"NULL",cpu_num,hostname)
+            if cpu_cores != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("Cores per CPU"),"NULL",cpu_cores,hostname)
+            if cpu_mhz != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPU, MHz"),"NULL",cpu_mhz,hostname)
+            if memory_mb != "":
+                rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("RAM Mem, MB"),"NULL",memory_mb,hostname)
 
             if hypervisor == "yes":
                 searchstring = "Hypervisor"
-                attid_hyp = GetAttributeId(searchstring)
-                InsertAttribute(object_id,server_type_id,attid_hyp,'NULL',1501,hostname)
+                attid_hyp = rtobject.GetAttributeId(searchstring)
+                rtobject.InsertAttribute(object_id,server_type_id,attid_hyp,'NULL',1501,hostname)
+                debug.print_message("Hypervisor, searching for: %s , Found: %s" %(searchstring, str(attid_hyp)))                
                 if len(virtual_servers) != 0:
-                    CleanVirtuals(object_id,virtual_servers)
+                    rtobject.CleanVirtuals(object_id,virtual_servers)
                     for virtual_name in virtual_servers:
-                        virtual_id = GetObjectId(virtual_name)   
+                        virtual_id = rtobject.GetObjectId(virtual_name)   
                         if virtual_id != None:
-                            LinkVirtualHypervisor(object_id,virtual_id)
+                            rtobject.LinkVirtualHypervisor(object_id,virtual_id)
+                            debug.print_message("Virtual Linking id:%s with %s(%s)" %(str(object_id), str(virtual_id), str(virtual_name)))
 
             if len(drac_ip) != 0:
-                UpdateNetworkInterface(object_id,'drac')
+                rtobject.UpdateNetworkInterface(object_id,'drac')
                 drac_list = [drac_ip]
-                CleanIPAddresses(object_id,drac_list,'drac')
-                InterfaceAddIpv4IP(object_id,'drac',drac_ip)
+                rtobject.CleanIPAddresses(object_id,drac_list,'drac')
+                rtobject.InterfaceAddIpv4IP(object_id,'drac',drac_ip)
+                debug.print_message("Updating Drac IP")
 
+
+        # Clean unused interfaces
+        rtobject.CleanUnusedInterfaces(object_id, device_list)
+        debug.print_message("Cleaning unused interfaces")
 
         for device in device_list:
             #Add/update network interface
-            port_id = UpdateNetworkInterface(object_id,device)
+            port_id = rtobject.UpdateNetworkInterface(object_id,device)
             #Add network connections
             if interface_connections[device_list.index(device)] != '':
-                LinkNetworkInterface(object_id,device,interface_connections[device_list.index(device)][0],interface_connections[device_list.index(device)][1])
+                rtobject.LinkNetworkInterface(object_id,device,interface_connections[device_list.index(device)][0],interface_connections[device_list.index(device)][1])
             #Add IPv4 ips
             if interfaces_ips[device_list.index(device)] != '':
-                CleanIPAddresses(object_id,interfaces_ips[device_list.index(device)],device)
+                rtobject.CleanIPAddresses(object_id,interfaces_ips[device_list.index(device)],device)
                 for ip in interfaces_ips[device_list.index(device)]:
-                    InterfaceAddIpv4IP(object_id,device,ip)
+                    rtobject.InterfaceAddIpv4IP(object_id,device,ip)
             #Add IPv6 ips
             if interfaces_ips6[device_list.index(device)] != '':
-                CleanIPv6Addresses(object_id,interfaces_ips6[device_list.index(device)],device)
+                rtobject.CleanIPv6Addresses(object_id,interfaces_ips6[device_list.index(device)],device)
                 for ip in interfaces_ips6[device_list.index(device)]:
-                    InterfaceAddIpv6IP(object_id,device,ip)
+                    rtobject.InterfaceAddIpv6IP(object_id,device,ip)
 
-        # Update motd from comment
-        sql = "SELECT comment FROM Object WHERE id = %d" % (object_id)
-        dbresult.execute(sql)
-        result = dbresult.fetchone()
-    
-        comment = ""
-        if result[0] != None:
-            comment = result[0]
-            # copy template to motd, if no exist make tamplate from motd
-            try:
-                shutil.copy2(motd_file_original, motd_file)
-            except IOError :
-                shutil.copy2(motd_file,motd_file_original)
-            
-            motd_open_file = open(motd_file, "a")
-            motd_open_file.write("\n\033[34m--- comment ---\033[33m\n\n" + comment + "\033[0m\n\n")
-            motd_open_file.close()
+        # Update motd from comment And Tags
+        comment = rtobject.GetObjectComment(object_id)
+        debug.print_message("Getting object comment: \n"+str(comment))
+
+        #Prepare tag comment
+        tags_list = rtobject.GetObjectTags(object_id)
+        debug.print_message("Retrieving TAG list: "+str(tags_list))
+        tag_array={}
+        comment_tag=''
+        for tag_row in tags_list:
+                #tag_array[tag_row[0]]
+            if not tag_array.get(tag_row[0]):
+                tag_array[tag_row[0]] = []
+            tag_array[tag_row[0]].append(tag_row[1])
+
+        for key in tag_array.keys():
+            if key:
+                comment_tag = comment_tag + key + ": " 
+            for tag in tag_array[key]:
+                comment_tag = comment_tag + tag + " "
+            comment_tag = comment_tag + "\n"
+            debug.print_message("Tags\n"+comment_tag)
+
+        if comment == None:
+            comment = ""
+        # copy template to motd, if no exist make tamplate from motd
+        try:
+            shutil.copy2(motd_file_original, motd_file)
+        except IOError :
+            shutil.copy2(motd_file,motd_file_original)
+        
+        debug.print_message("Updating MOTD file")
+        motd_open_file = open(motd_file, "a")
+        motd_open_file.write("\n\033[34m--- tags ---\033[33m\n\n" + comment_tag + "\033[0m")
+        motd_open_file.write("\n\033[34m--- comment ---\033[33m\n\n" + comment + "\033[0m\n")
+        motd_open_file.close()
 
     else:
         #Hostname is different
         print "Service tag %s already exist, but hostname is different." % service_tag
+        debug.print_message("Service tag %s already exist, but hostname is different." % service_tag)
 
 db.close()

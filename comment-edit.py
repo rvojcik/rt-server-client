@@ -29,8 +29,18 @@ import MySQLdb
 import platform
 import commands
 
+# Get script path
+script_path = '/opt/server-audit'
+
+# Add local module path
+sys.path.append(script_path + '/lib/')
+
+import ipaddr
+import rtapi
+
+
 # Basic config
-config_path = "/opt/server-audit/conf/"
+config_path = script_path + "/conf/"
 default_editor = "vim"
 tmp_file = '/tmp/comment-edit'
 
@@ -52,20 +62,17 @@ try:
 except MySQLdb.Error ,e:
     print "Error %d: %s" % (e.args[0],e.args[1])
     sys.exit(1)
-#set cursor for db
-dbresult = db.cursor()
+
+# Init Racktables object
+rtobject = rtapi.RTObject(db)
 
 #Open new comment_file
 comment_file = open(tmp_file,'w')
 
 # Get comment from database
-sql = "SELECT comment FROM Object WHERE name = '%s'" % (platform.node())
-dbresult.execute(sql)
-result = dbresult.fetchone()
+comment = rtobject.GetObjectComment(rtobject.GetObjectId(platform.node()))
 
-if result[0] != None:
-    comment = result[0]
-else:
+if comment == None:
     comment = ""
    
 comment_file.write(comment)
@@ -85,10 +92,8 @@ if answer == "y":
     #Read comment from file
     comment_file = open(tmp_file, 'r')
     comment = comment_file.read()
-    sql = "UPDATE Object SET comment = '%s' WHERE name = '%s'" % (comment, platform.node())
+    rtobject.UpdateObjectComment(rtobject.GetObjectId(platform.node()), comment)
     
-    dbresult.execute(sql)
-    db.commit()
 
     #Close file
     comment_file.close()
