@@ -175,6 +175,7 @@ else:
 
 product_name = ''
 vendor = ''
+# Get hostname
 hostname = platform.node()
 if server_type_id == 4:
     # Get service tag
@@ -196,9 +197,6 @@ elif server_type_id == 1504:
 else:
     service_tag = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -t')
 
-# Get hostname
-if init_run == "yes":
-    hostname = init_prefix + "-" + service_tag
 debug.print_message("Hostname: "+hostname)
 
 # CPU information
