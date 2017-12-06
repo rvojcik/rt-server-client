@@ -180,13 +180,13 @@ hostname = platform.node()
 if server_type_id == 4:
     # Get service tag
     # Server type, model
-    product_name = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -m')
+    product_name = commands.getoutput(script_path + '/get-bios-ident.py -s -m')
     debug.print_message("Product name: "+product_name)
 
-    service_tag = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -t')
+    service_tag = commands.getoutput(script_path + '/get-bios-ident.py -s -t')
     debug.print_message("Service Tag: "+service_tag)
 
-    vendor = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -v')
+    vendor = commands.getoutput(script_path + '/get-bios-ident.py -s -v')
     debug.print_message("Vendor: "+vendor)
 
 
@@ -195,7 +195,7 @@ elif server_type_id == 1504:
     service_tag = "VPS-"+hostname
     debug.print_message("VPS Service Tag override: "+service_tag)
 else:
-    service_tag = commands.getoutput('/opt/server-audit/get-bios-ident.py -s -t')
+    service_tag = commands.getoutput(script_path + '/get-bios-ident.py -s -t')
 
 debug.print_message("Hostname: "+hostname)
 
