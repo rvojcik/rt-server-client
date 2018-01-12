@@ -36,6 +36,19 @@ TODO
     * support for windows servers
     * support for FreeBSD
 
+
+Known Issues
+------------
+    * Create manually missing attributes for Server Issue #15
+      - "CPU Model"
+      - "CPUs Logical"
+      - "CPUs"
+      - "Cores per CPU"
+      - "CPU, MHz"
+      - "RAM Mem, MB"
+      - "Installation Date"
+      - "Kernel" 
+
 Requirements
 ------------
 
