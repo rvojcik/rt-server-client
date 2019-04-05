@@ -74,6 +74,12 @@ def get_interfaces():
                     interfaces.append(interface_name)
                 elif interface_name.find('em') > -1:
                     interfaces.append(interface_name)
+                elif interface_name.find('eno') > -1:
+                    interfaces.append(interface_name)
+                elif interface_name.find('enp4s0f') > -1:
+                    interfaces.append(interface_name)
+                elif interface_name.find('enp5s0f') > -1:
+                    interfaces.append(interface_name)
 
         count += 1
    
