@@ -91,13 +91,13 @@ args = parser.parse_args()
 # Debug mode
 debug = base.Debug(args)
 
-
 try:
-    config_file = open(config_path + main_config)
     debug.print_message("Opening config: "+config_path+main_config)
+    config_file = open(config_path + main_config)
 except IOError ,e:
     print("({})".format(e))
     sys.exit()
+
 
 # Parsing config options
 config = ConfigParser()
@@ -114,25 +114,27 @@ def getHwAddr(ifname):
 #END
 
 
-def GetVirtualServers(virtualization):
+def GetVirtualServers(virt='xen'):
     """Create list of virtual servers"""
 
-    if virtualization == 'xen':
-        output = commands.getoutput('xm list')
-        virtuals = [] 
+    if virt == 'xen':
+        command = 'xm list'
+        index = 0
+    elif virt == 'qemu':
+        command = 'virsh list --all'
+        index = 1
+    else:
+        print('Unsupported virtualization')
+        sys.exit(1)
+        
+    output = commands.getoutput(command)
+    virtuals = [] 
 
-        for line in output.splitlines()[2:]:
-            virtual = line.split()[0]
-            virtuals.append(virtual)
+    for line in output.splitlines()[2:]:
+        virtual = line.split()[index]
+        virtuals.append(virtual)
 
-    if virtualization == 'vz':
-        output = commands.getoutput('vzlist')
-        virtuals = [] 
-
-        for line in output.splitlines()[1:]:
-            virtual = line.split()[4]
-            virtuals.append(virtual)
-   
+    debug.print_message("Virtual servers: "+str(virtuals))
 
     return virtuals
 
@@ -152,18 +154,47 @@ interface_connections = []
 interfaces_ips = []
 interfaces_ips6 = []
 
+# Get service tag
+# Server type, model
+product_name = commands.getoutput( script_path + '/get-bios-ident.py -s -m')
+debug.print_message("Product name: "+product_name)
+
+service_tag = commands.getoutput(script_path + '/get-bios-ident.py -s -t')
+debug.print_message("Service Tag: "+service_tag)
+
+vendor = commands.getoutput(script_path + '/get-bios-ident.py -s -v')
+debug.print_message("Vendor: "+vendor)
+
 # Check for virtualization 
 if not os.path.isdir('/proc/xen'):
-    #Je to server
-    server_type_id = 4
-    hypervisor = "no"
-    debug.print_message("Server is physical normal server")
+    # Not xen, check libvirtd
+    if os.path.isfile('/usr/sbin/libvirtd'):
+        # It's KVM/QEMU Hypervisor
+        server_type_id = 4
+        hypervisor = "yes"
+        virtual_servers = GetVirtualServers(virt='qemu')
+        debug.print_message("Server is hypervisor")
+        debug.print_message("Virtuals: "+str(virtual_servers))
+    elif vendor == 'QEMU':
+        # Looks like server but, QEMU vendor
+        server_type_id = 1504
+        hypervisor = "no"
+        debug.print_message("Server is virtual (QEMU)")
+        # Wait, exit normaly when supervisor on QEMU
+        if init_run == "yes":
+            debug.print_message("It's QEMU virtual on Supervisor, exiting.")
+            sys.exit(0)
+    else:
+        #Je to server
+        server_type_id = 4
+        hypervisor = "no"
+        debug.print_message("Server is physical normal server")
 else:
     if not os.path.isfile('/proc/xen/xenbus'):
         #Je to virtual
         server_type_id = 1504
         hypervisor = "no"
-        debug.print_message("Server is virtual")
+        debug.print_message("Server is virtual (XEN)")
     else:
         #Je to hypervisor
         server_type_id = 4
@@ -173,25 +204,10 @@ else:
         debug.print_message("Virtuals: "+str(virtual_servers))
 
 
-product_name = ''
-vendor = ''
-# Get hostname
 hostname = platform.node()
-if server_type_id == 4:
-    # Get service tag
-    # Server type, model
-    product_name = commands.getoutput(script_path + '/get-bios-ident.py -s -m')
-    debug.print_message("Product name: "+product_name)
-
-    service_tag = commands.getoutput(script_path + '/get-bios-ident.py -s -t')
-    debug.print_message("Service Tag: "+service_tag)
-
-    vendor = commands.getoutput(script_path + '/get-bios-ident.py -s -v')
-    debug.print_message("Vendor: "+vendor)
-
 
 # Workaround for VPS and servicetag
-elif server_type_id == 1504:
+if server_type_id == 1504:
     service_tag = "VPS-"+hostname
     debug.print_message("VPS Service Tag override: "+service_tag)
 else:
@@ -261,8 +277,8 @@ for interface in device_list:
                 switch_name = line.split('=')[1]
             elif line.find('lldp.'+interface+'.port.descr') > -1:
                 switch_port = line.split('=')[1]
-    # For Force10
-    elif lldp_output.find('Force10') > -1:
+    # Others cisco like
+    else:
         for line in lldp_output.split('\n'):
             if line.find('lldp.'+interface+'.chassis.name') > -1:
                 switch_name = line.split('=')[1]
@@ -290,9 +306,11 @@ management_ip_commands = ['omreport chassis remoteaccess config=nic' , 'ipmitool
 drac_ip = ''
 for mgmcommand in management_ip_commands:
     output = commands.getstatusoutput(mgmcommand)
-    if output[0] == 0:
+    try:
         drac_ip = re.findall('[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}',output[1])[0]
         break
+    except:
+        pass
 debug.print_message("Drac IP: "+drac_ip)
 
 
@@ -419,8 +437,8 @@ if not rtobject.ObjectExistST(service_tag):
                     for virtual_name in virtual_servers:
                         virtual_id = rtobject.GetObjectId(virtual_name)   
                         if virtual_id != None:
-                            rtobject.LinkVirtualHypervisor(object_id,virtual_id)
                             debug.print_message("Virtual Linking id:%s with %s(%s)" %(str(object_id), str(virtual_id), str(virtual_name)))
+                            rtobject.LinkVirtualHypervisor(object_id,virtual_id)
 
 
             if len(drac_ip) != 0:
@@ -573,8 +591,12 @@ else:
                     for virtual_name in virtual_servers:
                         virtual_id = rtobject.GetObjectId(virtual_name)   
                         if virtual_id != None:
-                            rtobject.LinkVirtualHypervisor(object_id,virtual_id)
                             debug.print_message("Virtual Linking id:%s with %s(%s)" %(str(object_id), str(virtual_id), str(virtual_name)))
+                            rtobject.LinkVirtualHypervisor(object_id,virtual_id)
+                        else:
+                            print "ERROR: Virtual (%s) exist on hypervisor but not in racktables database" % (virtual_name)
+                            
+                            
 
             if len(drac_ip) != 0:
                 rtobject.UpdateNetworkInterface(object_id,'drac')
@@ -593,6 +615,7 @@ else:
             port_id = rtobject.UpdateNetworkInterface(object_id,device)
             #Add network connections
             if interface_connections[device_list.index(device)] != '':
+                debug.print_message("Processing %s, %s, %s" % (device, interface_connections[device_list.index(device)][0], interface_connections[device_list.index(device)][1]))
                 rtobject.LinkNetworkInterface(object_id,device,interface_connections[device_list.index(device)][0],interface_connections[device_list.index(device)][1])
             #Add IPv4 ips
             if interfaces_ips[device_list.index(device)] != '':
