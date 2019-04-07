@@ -22,25 +22,48 @@ import socket
 import fcntl
 import struct
 import commands
+import re
 
-def get_ip4_addr(ifname):
+def get_ip4_addr(ifname=None):
     addresses = []
-    lines = commands.getoutput('ip addr show dev '+ ifname +' | grep "inet "').split('\n')
-    for line in lines:
-        if line != '':
-            address = line.strip().split(' ')[1].split('/')[0] 
-            addresses.append(address)
+
+    # If no interface specified, try all
+    if ifname == None:
+        for interface in get_interfaces():
+            lines = commands.getoutput('ip addr show dev '+ interface +' | grep "inet "').split('\n')
+            for line in lines:
+                if line != '':
+                    address = line.strip().split(' ')[1].split('/')[0] 
+                    addresses.append(address)
+            
+    else:
+        lines = commands.getoutput('ip addr show dev '+ ifname +' | grep "inet "').split('\n')
+        for line in lines:
+            if line != '':
+                address = line.strip().split(' ')[1].split('/')[0] 
+                addresses.append(address)
 
     return addresses
 
-def get_ip6_addr(ifname):
+def get_ip6_addr(ifname=None):
     addresses = []
-    lines = commands.getoutput('ip addr show dev '+ ifname +' | grep "inet6 "').split('\n')
-    for line in lines:
-        if line != '':
-            address = line.strip().split(' ')[1].split('/')[0] 
-            if address.find('fe80') != 0:
-                addresses.append(address)
+
+    # If no interface specified, try all
+    if ifname == None:
+        for interface in get_interfaces():
+            lines = commands.getoutput('ip addr show dev '+ interface +' | grep "inet6 "').split('\n')
+            for line in lines:
+                if line != '':
+                    address = line.strip().split(' ')[1].split('/')[0] 
+                    if address.find('fe80') != 0:
+                        addresses.append(address)
+    else:
+        lines = commands.getoutput('ip addr show dev '+ ifname +' | grep "inet6 "').split('\n')
+        for line in lines:
+            if line != '':
+                address = line.strip().split(' ')[1].split('/')[0] 
+                if address.find('fe80') != 0:
+                    addresses.append(address)
 
     return addresses
 def get_hw_addr(ifname):
@@ -57,23 +80,12 @@ def get_interfaces():
 
     for line in proc_net_dev:
         if (count > 1):
-                words = line.split()
-                interface = words[0]
-                interface_name = interface.split(':')[0]
-                if interface_name.find('eth') > -1:
-                    interfaces.append(interface_name)
-                elif interface_name.find('bond') > -1:
-                    interfaces.append(interface_name)
-                elif interface_name.find('san') > -1:
-                    interfaces.append(interface_name)
-                elif interface_name.find('br') > -1:
-                    interfaces.append(interface_name)
-                elif interface_name.find('venet') > -1:
-                    interfaces.append(interface_name)
-                elif interface_name.find('veth') > -1:
-                    interfaces.append(interface_name)
-                elif interface_name.find('em') > -1:
-                    interfaces.append(interface_name)
+            words = line.split()
+            interface = words[0]
+            interface_name = interface.split(':')[0]
+
+            if re.match("^(eth|eno|enp|bond|san|br)[0-9]+.*", interface_name):
+                interfaces.append(interface_name)
 
         count += 1
    
