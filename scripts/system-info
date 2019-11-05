@@ -37,7 +37,7 @@
 #    along with this program; if not, write to the Free Software
 #    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 #
-
+from __future__ import print_function
 import sys
 import os
 import commands
@@ -55,18 +55,12 @@ import socket
 import struct
 #END
 
-# Get script path
-script_path = os.path.dirname(sys.argv[0])
-
-# Add local module path
-sys.path.append(script_path + '/lib/')
-
 import ipaddr
 import MySQLdb
-from ToolBox import net, dell, base
+from rt_server_client.ToolBox import net, base
 import rtapi
 
-config_path = script_path + "/conf/"
+config_path = "/etc/rt-server-client/"
 motd_file_original = "/etc/motd.ls.orig"
 motd_file = "/etc/motd"
 
@@ -94,7 +88,7 @@ debug = base.Debug(args)
 try:
     debug.print_message("Opening config: "+config_path+main_config)
     config_file = open(config_path + main_config)
-except IOError ,e:
+except IOError as e:
     print("({})".format(e))
     sys.exit()
 
@@ -126,9 +120,9 @@ def GetVirtualServers(virt='xen'):
     else:
         print('Unsupported virtualization')
         sys.exit(1)
-        
+
     output = commands.getoutput(command)
-    virtuals = [] 
+    virtuals = []
 
     for line in output.splitlines()[2:]:
         virtual = line.split()[index]
@@ -156,16 +150,16 @@ interfaces_ips6 = []
 
 # Get service tag
 # Server type, model
-product_name = commands.getoutput( script_path + '/get-bios-ident.py -s -m')
+product_name = commands.getoutput('get-bios-ident -s -m')
 debug.print_message("Product name: "+product_name)
 
-service_tag = commands.getoutput(script_path + '/get-bios-ident.py -s -t')
+service_tag = commands.getoutput('get-bios-ident -s -t')
 debug.print_message("Service Tag: "+service_tag)
 
-vendor = commands.getoutput(script_path + '/get-bios-ident.py -s -v')
+vendor = commands.getoutput('get-bios-ident -s -v')
 debug.print_message("Vendor: "+vendor)
 
-# Check for virtualization 
+# Check for virtualization
 if not os.path.isdir('/proc/xen'):
     # Not xen, check libvirtd
     if os.path.isfile('/usr/sbin/libvirtd'):
@@ -211,7 +205,7 @@ if server_type_id == 1504:
     service_tag = "VPS-"+hostname
     debug.print_message("VPS Service Tag override: "+service_tag)
 else:
-    service_tag = commands.getoutput(script_path + '/get-bios-ident.py -s -t')
+    service_tag = commands.getoutput('get-bios-ident -s -t')
 
 debug.print_message("Hostname: "+hostname)
 
@@ -284,7 +278,7 @@ for interface in device_list:
                 switch_name = line.split('=')[1]
             elif line.find('lldp.'+interface+'.port.ifname') > -1:
                 switch_port = line.split('=')[1]
-    
+
     #add connection to list
     connection = [switch_name, switch_port]
     debug.print_message("Connection: "+str(connection))
@@ -338,18 +332,6 @@ if hostname != label:
         update_label = "yes"
 debug.print_message("label, update_label: %s %s" % (label, update_label))
 
-# Get support and waranty for service tag
-#if service_tag == '':
-#    support_type = ''
-#    support_ends = ''
-#else:
-#    dell_list = dell.get_waranty_info(service_tag)
-#    if dell_list != None:
-#        support_type, support_ends = dell_list
-#    else:
-#        support_type = ''
-#        support_ends = ''
-
 # Get Kernel version
 kernel_version = platform.release()
 debug.print_message("Kernel: "+kernel_version)
@@ -359,10 +341,10 @@ debug.print_message("Kernel: "+kernel_version)
 # Create connection to database
 try:
     # Create connection to database
-    debug.print_message("Database connection [host, port, passwd, database, user] = [ %s, %s, %s, %s, %s ]" % (config.get('mysqldb','host'),"3306", "xxxxxx",config.get('mysqldb','db'),config.get('mysqldb','user'))) 
+    debug.print_message("Database connection [host, port, passwd, database, user] = [ %s, %s, %s, %s, %s ]" % (config.get('mysqldb','host'),"3306", "xxxxxx",config.get('mysqldb','db'),config.get('mysqldb','user')))
     db = MySQLdb.connect(host=config.get('mysqldb','host'),port=3306, passwd=config.get('mysqldb','password'),db=config.get('mysqldb','db'),user=config.get('mysqldb','user'))
-except MySQLdb.Error ,e:
-    print "Error %d: %s" % (e.args[0],e.args[1])
+except MySQLdb.Error as e:
+    print("Error %d: %s" % (e.args[0],e.args[1]))
     sys.exit(1)
 
 
@@ -395,7 +377,7 @@ if not rtobject.ObjectExistST(service_tag):
         else:
             debug.print_message("OS id not found in racktables")
 
-        
+
         if server_type_id == 4:
             #get id of HW
             words = product_name.split()
@@ -435,7 +417,7 @@ if not rtobject.ObjectExistST(service_tag):
                 if len(virtual_servers) != 0:
                     rtobject.CleanVirtuals(object_id,virtual_servers)
                     for virtual_name in virtual_servers:
-                        virtual_id = rtobject.GetObjectId(virtual_name)   
+                        virtual_id = rtobject.GetObjectId(virtual_name)
                         if virtual_id != None:
                             debug.print_message("Virtual Linking id:%s with %s(%s)" %(str(object_id), str(virtual_id), str(virtual_name)))
                             rtobject.LinkVirtualHypervisor(object_id,virtual_id)
@@ -462,7 +444,7 @@ if not rtobject.ObjectExistST(service_tag):
                 for ip in interfaces_ips6[device_list.index(device)]:
                     rtobject.InterfaceAddIpv6IP(object_id,device,ip)
 
-        # Set Installation Date 
+        # Set Installation Date
         rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("Installation Date"),"NULL",int(time.time()),hostname)
         rtobject.InsertLog(object_id, "Server-Audit insert instalation date")
         debug.print_message("Inserting installation date: "+str(time.time()))
@@ -472,7 +454,7 @@ if not rtobject.ObjectExistST(service_tag):
         #
         # hostname exist, what to do?
         #
-        print "Hostname %s already exist. I'm using service tag: %s" % (hostname,service_tag)
+        print("Hostname %s already exist. I'm using service tag: %s" % (hostname,service_tag))
         debug.print_message("Hostname %s already exist. My Service Tag is %s" % (hostname,service_tag))
 else:
     #
@@ -494,7 +476,7 @@ else:
             object_label = rtobject.GetObjectLabel(object_id)
             debug.print_message("Object id is: %s and label %s" %(str(object_id), object_label))
         else:
-            print "Can't do it. Hostname %s and service-tag %s already exist, but does not belong to the same server"% (hostname, service_tag)
+            print("Can't do it. Hostname %s and service-tag %s already exist, but does not belong to the same server"% (hostname, service_tag))
             debug.print_message("Can't do it. Hostname %s and service-tag %s already exist, but does not belong to the same server"% (hostname, service_tag))
             sys.exit(1)
 
@@ -540,12 +522,12 @@ else:
                 debug.print_message("Inseting new kernel version to dictionary: %s"% str(kernel_version))
                 # kernels dictionary ahs ID 10003
                 rtobject.InsertDictionaryValue(10003,str(kernel_version))
-            kernel_id=rtobject.GetDictionaryId(kernel_version)    
+            kernel_id=rtobject.GetDictionaryId(kernel_version)
             #log kernel change, and update RT
             if rtobject.GetAttributeValue(object_id, attr_id) != None:
                 last_kernel_id = rtobject.GetAttributeValue(object_id, attr_id)[1]
                 last_kernel_version = rtobject.GetDictionaryValueById(last_kernel_id)
-            else: 
+            else:
                 last_kernel_id = ""
                 last_kernel_version = ""
             if last_kernel_id != kernel_id:
@@ -585,18 +567,18 @@ else:
                 searchstring = "Hypervisor"
                 attid_hyp = rtobject.GetAttributeId(searchstring)
                 rtobject.InsertAttribute(object_id,server_type_id,attid_hyp,'NULL',1501,hostname)
-                debug.print_message("Hypervisor, searching for: %s , Found: %s" %(searchstring, str(attid_hyp)))                
+                debug.print_message("Hypervisor, searching for: %s , Found: %s" %(searchstring, str(attid_hyp)))
                 if len(virtual_servers) != 0:
                     rtobject.CleanVirtuals(object_id,virtual_servers)
                     for virtual_name in virtual_servers:
-                        virtual_id = rtobject.GetObjectId(virtual_name)   
+                        virtual_id = rtobject.GetObjectId(virtual_name)
                         if virtual_id != None:
                             debug.print_message("Virtual Linking id:%s with %s(%s)" %(str(object_id), str(virtual_id), str(virtual_name)))
                             rtobject.LinkVirtualHypervisor(object_id,virtual_id)
                         else:
-                            print "ERROR: Virtual (%s) exist on hypervisor but not in racktables database" % (virtual_name)
-                            
-                            
+                            print("ERROR: Virtual (%s) exist on hypervisor but not in racktables database" % (virtual_name))
+
+
 
             if len(drac_ip) != 0:
                 rtobject.UpdateNetworkInterface(object_id,'drac')
@@ -645,7 +627,7 @@ else:
 
         for key in tag_array.keys():
             if key:
-                comment_tag = comment_tag + key + ": " 
+                comment_tag = comment_tag + key + ": "
             for tag in tag_array[key]:
                 comment_tag = comment_tag + tag + " "
             comment_tag = comment_tag + "\n"
@@ -658,7 +640,7 @@ else:
             shutil.copy2(motd_file_original, motd_file)
         except IOError :
             shutil.copy2(motd_file,motd_file_original)
-        
+
         debug.print_message("Updating MOTD file")
         motd_open_file = open(motd_file, "a")
         motd_open_file.write("\n\033[34m--- tags ---\033[33m\n\n" + comment_tag + "\033[0m")
@@ -667,7 +649,7 @@ else:
 
     else:
         #Hostname is different
-        print "Service tag %s already exist, but hostname is different." % service_tag
+        print("Service tag %s already exist, but hostname is different." % service_tag)
         debug.print_message("Service tag %s already exist, but hostname is different." % service_tag)
 
 db.close()

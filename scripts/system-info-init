@@ -1,0 +1,80 @@
+#!/usr/bin/python
+#
+# Prepare necessary things in database
+import rtapi
+import os
+from ConfigParser import ConfigParser
+import sys
+import MySQLdb
+
+# Get script path
+config_path = "/etc/rt-server-client/"
+main_config = "main.conf"
+
+try:
+    config_file = open(config_path + main_config)
+except IOError as e:
+    print("({})".format(e))
+    sys.exit()
+
+# Parsing config options
+config = ConfigParser()
+config.readfp(config_file)
+
+# Close config
+config_file.close()
+
+# Create connection to database
+try:
+    # Create connection to database
+    db = MySQLdb.connect(host=config.get('mysqldb','host'),port=3306, passwd=config.get('mysqldb','password'),db=config.get('mysqldb','db'),user=config.get('mysqldb','user'))
+except MySQLdb.Error as e:
+    print("Error %d: %s" % (e.args[0],e.args[1]))
+    sys.exit(1)
+
+# Initialize rtapi object
+rtobject = rtapi.RTObject(db)
+
+
+attribute_map = {
+    'CPUs': {
+        'object_type': 'Server',
+        'attribute_type': 'uint'
+    },
+    'CPU Model': {
+        'object_type': 'Server',
+        'attribute_type': 'string'
+    },
+    'CPUs Logical': {
+        'object_type': 'Server',
+        'attribute_type': 'uint'
+    },
+    'Cores per CPU': {
+        'object_type': 'Server',
+        'attribute_type': 'uint'
+    },
+    'RAM Mem, MB': {
+        'object_type': 'Server',
+        'attribute_type': 'uint'
+    },
+    'Installation Date': {
+        'object_type': 'Server',
+        'attribute_type': 'date'
+    },
+    'SW type': {
+        'object_type': 'Server',
+        'attribute_type': 'dict'
+    },
+    'Kernel': {
+        'object_type': 'Server',
+        'attribute_type': 'dict'
+    },
+    'HW type': {
+        'object_type': 'Server',
+        'attribute_type': 'dict'
+    },
+}
+
+for attribute, values in attribute_map.items():
+    print("CreateAttribute(%s, %s)" % (values['attribute_type'], attribute))
+    rtobject.CreateAttribute(values['attribute_type'], attribute)

@@ -52,10 +52,10 @@ def getServiceTag(output, dmidecode):
             return re.findall('UUID: .*', dmidecode)[0].split("-")[-1]
     # DELL and others
     else:
-        if re.findall('Serial Number: .*', dmidecode):    
+        if re.findall('Serial Number: .*', dmidecode):
             return re.findall('Serial Number: .*', dmidecode)[0].split()[2]
 
-    return 'unknown' 
+    return 'unknown'
 
 #}}} Print functions
 
@@ -79,16 +79,16 @@ def eexit(ecode, msg):
 if __name__ == '__main__':
     # Parsing arguments
     parser = argparse.ArgumentParser(
-        description= 'Script return service tag string based on vendor and others', 
+        description= 'Script return service tag string based on vendor and others',
         epilog='Created by Robert Vojcik <robert@vojcik.net>')
-    
+
     # Example of sample arguments
     parser.add_argument('-v', action="store_true", dest="action_vendor", default=False, help='Print vendor name')
     parser.add_argument('-m', action="store_true", dest="action_model", default=False, help='Print model name')
     parser.add_argument('-t', action="store_true", dest="action_st", default=False, help='Print service tag')
     parser.add_argument('-s', action="store_true", dest="action_simple", default=False, help='Batch print, simple output')
     parser.add_argument('-u', action="store_true", dest="action_uuid", default=False, help='Print system UUID')
-    
+
     args = parser.parse_args()
 
     dmidecode = commands.getstatusoutput('dmidecode -q')
@@ -140,6 +140,6 @@ if __name__ == '__main__':
                 print(output['UUID'])
             else:
                 print('UUID: %s' %(output['UUID']))
-     
+
     else:
         eexit(1, 'Problem during executing dmidecode')

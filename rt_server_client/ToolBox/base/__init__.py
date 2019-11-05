@@ -16,37 +16,17 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program; if not, write to the Free Software
 #    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
-#
-import urllib2
-#from bs4 import BeautifulSoup
-import bs3
 
-def get_waranty_info(service_tag):
-    dell_support_url = "http://www.dell.com/support/troubleshooting/us/en/04/Servicetag/"
-    try:
-        soup = bs3.BeautifulSoup(urllib2.urlopen(dell_support_url+service_tag).read())
-    except urllib2.URLError:
-        soup = None
-
-    if soup != None:
-        
-        tmp = soup.find('li', {"class" : "TopTwoWarrantyListItem"})
-        if tmp != None:
-           support_type = tmp.findAll('b')[0].string
+class Debug:
+    """Debug Class"""
+    def __init__(self,args):
+        if args.debug_mode:
+            self.debug_enable = True
         else:
-            support_type = ''
-        try:
-            tmp = soup.find('li', {"class" : "TopTwoWarrantyListItem"})
-        except urllib2.URLError:
-            tmp = None
+            self.debug_enable = False
 
-        if tmp != None:
-           support_time = tmp.findAll('b')[1].string
-        else:
-            support_time = ''
+    def print_message(self,message):
+        """Print debug messages"""
 
-        output_list = [support_type, support_time]
-    else:
-        output_list = None
-
-    return output_list
+        if self.debug_enable:
+            print("[DEBUG] " + str(message))
