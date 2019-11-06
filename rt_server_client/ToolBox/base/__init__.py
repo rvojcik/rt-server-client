@@ -17,11 +17,18 @@
 #    along with this program; if not, write to the Free Software
 #    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
+from __future__ import print_function
+import sys
+from .. import colors
+
 class Debug:
     """Debug Class"""
     def __init__(self,args):
-        if args.debug_mode:
-            self.debug_enable = True
+        if args:
+            if args.debug_mode:
+                self.debug_enable = True
+            else:
+                self.debug_enable = False
         else:
             self.debug_enable = False
 
@@ -30,3 +37,15 @@ class Debug:
 
         if self.debug_enable:
             print("[DEBUG] " + str(message))
+
+def pwrn(*objs):
+    """Print warning messages"""
+    print(colors.term.YELLOW + 'WARNING: ', *objs, end=colors.term.NOC+"\n", file=sys.stderr)
+
+def perr(*objs):
+    """Print error messages"""
+    print(colors.term.RED + 'ERROR: ', *objs, end=colors.term.NOC+"\n", file=sys.stderr)
+
+def pok(*objs):
+    """Print error messages"""
+    print(colors.term.GREEN + 'SUCCESS: ', *objs, end=colors.term.NOC+"\n", file=sys.stderr)

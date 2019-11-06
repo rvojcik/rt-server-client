@@ -1,0 +1,20 @@
+class term:
+    '''Colors class for terminal
+    Just use term.NOC,WHITE,GREEN...'''
+    NOC     = '\033[0m'
+    WHITE   = '\033[1m'
+    GREEN   = '\033[92m'
+    RED     = '\033[91m'
+    YELLOW  = '\033[93m'
+    BLUE    = '\033[94m'
+    AZURE   = '\033[96m'
+    BLACK   = '\033[90m'
+    PINK    = '\033[95m'
+    BGREEN   = '\033[42m'
+    BRED     = '\033[41m'
+    BYELLOW  = '\033[43m'
+    BBLUE    = '\033[44m'
+    BAZURE   = '\033[46m'
+    BBLACK   = '\033[40m'
+    BPINK    = '\033[45m'
+
