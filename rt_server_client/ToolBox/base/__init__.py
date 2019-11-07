@@ -49,3 +49,7 @@ def perr(*objs):
 def pok(*objs):
     """Print error messages"""
     print(colors.term.GREEN + 'SUCCESS: ', *objs, end=colors.term.NOC+"\n", file=sys.stderr)
+
+def pout(*objs):
+    """Print messages"""
+    print(colors.term.BLUE, *objs, end=colors.term.NOC+"\n", file=sys.stdout)

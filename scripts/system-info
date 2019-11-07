@@ -123,11 +123,12 @@ rtobject = rtapi.RTObject(db)
 # Initialization mode
 if args.init_mode:
     debug.print_message("Running rt-server-client initialization")
-    if database_init.run(rtobject):
+    ret = database_init.run(rtobject)
+    if not ret:
         base.perr("Initialization process failed")
         sys.exit(1)
     else:
-        base.pok("Initialization process done"
+        base.pok("Initialization process done")
         sys.exit(0)
 
 # Prepare server_object and gather information about the system
@@ -167,11 +168,11 @@ if not rtobject.ObjectExistST(server_object.information['service_tag']):
         # hostname exist, what to do?
         #
         print("Hostname %s already exist but with different service tag. I'm using service tag: %s" % (
-            server_object.information['hostname',
+            server_object.information['hostname'],
             server_object.information['service_tag']
         ))
         debug.print_message("Hostname %s already exist. My Service Tag is %s" % (
-            server_object.information['hostname',
+            server_object.information['hostname'],
             server_object.information['service_tag']
         ))
         sys.exit(1)
@@ -249,7 +250,7 @@ if result == None:
     debug.print_message("Installation date is blank, setting actual time")
 
 # OS System Information
-searchstring = server_object.informationp'os_distribution'] + "%" + server_object.information['os_codename']
+searchstring = server_object.information['os_distribution'] + "%" + server_object.information['os_codename']
 os_id = rtobject.GetDictionaryId(searchstring)
 attr_id = rtobject.GetAttributeId("SW type")
 debug.print_message("SW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(os_id), str(attr_id)))
