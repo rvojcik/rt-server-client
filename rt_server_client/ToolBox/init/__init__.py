@@ -13,6 +13,11 @@ def run(rtobject):
             'sticky': 'no',
             'attribute_type': 'uint'
         },
+        'CPU, MHz': {
+            'object_types': ['Server'],
+            'sticky': 'no',
+            'attribute_type': 'uint'
+        },
         'CPU Model': {
             'object_types': ['Server'],
             'sticky': 'no',

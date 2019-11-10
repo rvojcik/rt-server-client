@@ -52,6 +52,7 @@ import argparse
 import ipaddr
 import MySQLdb
 from rt_server_client.ToolBox import net, base
+from rt_server_client import sysinfo
 from rt_server_client.ToolBox import init as database_init
 import rtapi
 
@@ -132,7 +133,7 @@ if args.init_mode:
         sys.exit(0)
 
 # Prepare server_object and gather information about the system
-server_object = SysInfo(args)
+server_object = sysinfo.SysInfo(args)
 server_object.DiscoverAll()
 debug.print_message("Discovered info from sysinfo class:" + str(server_object.information))
 
@@ -206,18 +207,6 @@ else:
             ))
             sys.exit(1)
 
-        # Update Zaloha attribute
-        if args.force_init:
-            debug.print_message("Updating Zaloha attribute")
-            rtobject.InsertAttribute(
-                object_id,
-                server_object.information['server_type_id'],
-                rtobject.GetAttributeId("Zaloha"),
-                'NULL',
-                1500,
-                server_object.information['hostname']
-            )
-
     else:
         #Hostname is different
         print("Service tag %s already exist, but hostname is different." % server_object.information['service_tag'])
@@ -226,6 +215,17 @@ else:
 #
 # Update Object information
 #
+# Update Zaloha attribute
+if args.force_init:
+    debug.print_message("Updating Zaloha attribute")
+    rtobject.InsertAttribute(
+        object_id,
+        server_object.information['server_type_id'],
+        rtobject.GetAttributeId("Zaloha"),
+        'NULL',
+        rtobject.GetDictionaryIdByValue('No', rtobject.GetDictionaryChapterId('Yes/No')),
+    )
+
 #Update label if it's not same
 if server_object.information['update_label'] == "yes":
     if server_object.information['label'] != object_label:
@@ -238,14 +238,14 @@ if server_object.information['update_label'] == "yes":
 
 # Set Installation date if it's blank
 result = rtobject.GetAttributeValue(object_id, rtobject.GetAttributeId("Installation Date"))
+debug.print_message("Installation date output: %s" % (str(result)))
 if result == None:
     rtobject.InsertAttribute(
         object_id,
         server_object.information['server_type_id'],
         rtobject.GetAttributeId("Installation Date"),
         "NULL",
-        int(time.time()),
-        server_object.information['hostname'])
+        int(time.time()))
     rtobject.InsertLog(object_id, "Server-Audit insert instalation date")
     debug.print_message("Installation date is blank, setting actual time")
 
@@ -254,6 +254,16 @@ searchstring = server_object.information['os_distribution'] + "%" + server_objec
 os_id = rtobject.GetDictionaryId(searchstring)
 attr_id = rtobject.GetAttributeId("SW type")
 debug.print_message("SW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(os_id), str(attr_id)))
+
+if os_id == None:
+    # SW Type not fount, adding one
+    debug.print_message("SW id not found in racktables, adding one.")
+    sw_dictionary_string = "%s%%GPASS%%%s (%s)" % (server_object.information['os_distribution'], server_object.information['os_version'], server_object.information['os_codename'])
+    debug.print_message("Inserting SW type: " + str(sw_dictionary_string))
+    rtobject.InsertDictionaryValue(rtobject.GetDictionaryChapterId('server OS type'), str(sw_dictionary_string))
+    os_id = rtobject.GetDictionaryId(searchstring)
+    debug.print_message("SW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(os_id), str(attr_id)))
+
 if os_id != None:
     debug.print_message("Inserting OS attribute: obj_id=%d srv_type_id=%d attr_id=%d os_id=%d hostname=%s" % (
         object_id,
@@ -266,12 +276,33 @@ if os_id != None:
         object_id,
         server_object.information['server_type_id'],
         attr_id,
+        "NULL",
         os_id,
-        server_object.information['hostname']
     )
 else:
     debug.print_message("OS id not found in racktables")
 
+# Insert kernel version atributes
+if server_object.information['kernel_version'] != "":
+    attr_id = rtobject.GetAttributeId("Kernel")
+    kernel_id=rtobject.GetDictionaryId(server_object.information['kernel_version'])
+    if kernel_id == None:
+        #Have to insert kernel version into dictionary
+        debug.print_message("Inseting new kernel version to dictionary: %s"% str(server_object.information['kernel_version']))
+        # kernels dictionary ahs ID 10003
+        rtobject.InsertDictionaryValue(rtobject.GetDictionaryChapterId('kernels'),str(server_object.information['kernel_version']))
+    kernel_id=rtobject.GetDictionaryId(server_object.information['kernel_version'])
+    #log kernel change, and update RT
+    if rtobject.GetAttributeValue(object_id, attr_id) != None:
+        last_kernel_id = rtobject.GetAttributeValue(object_id, attr_id)[1]
+        last_kernel_version = rtobject.GetDictionaryValueById(last_kernel_id)
+    else:
+        last_kernel_id = ""
+        last_kernel_version = ""
+    if last_kernel_id != kernel_id:
+        logstring = "Kernel changed %s -> %s" % (last_kernel_version,server_object.information['kernel_version'])
+        rtobject.InsertLog(object_id,logstring)
+        rtobject.InsertAttribute(object_id,server_object.information['server_type_id'],attr_id,"NULL",kernel_id)
 
 if server_object.information['server_type_id'] == 4:
     #get id of HW
@@ -281,76 +312,136 @@ if server_object.information['server_type_id'] == 4:
     #insert os and hw info
     attr_id = rtobject.GetAttributeId("HW type")
     debug.print_message("HW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(hw_id), str(attr_id)))
+    if hw_id == None:
+        # HW Type not fount, adding one
+        debug.print_message("HW id not found in racktables, adding one.")
+        hw_dictionary_string = "%s%%GPASS%%%s" % (server_object.information['vendor'], server_object.information['product_name'])
+        debug.print_message("Inserting HW type: " + str(hw_dictionary_string))
+        rtobject.InsertDictionaryValue(rtobject.GetDictionaryChapterId('server models'), str(hw_dictionary_string))
+        hw_id = rtobject.GetDictionaryId(searchstring)
+        debug.print_message("HW Type, searching for: %s , Found: %s, Updating: %s" %(searchstring, str(hw_id), str(attr_id)))
+
+    # Insert attribute to server
     if hw_id != None:
+        debug.print_message("Inserting HW attribute: obj_id=%d srv_type_id=%d attr_id=%d hw_id=%d" % (
+            object_id,
+            server_object.information['server_type_id'],
+            attr_id,
+            hw_id,
+        ))
         rtobject.InsertAttribute(
             object_id,
             server_object.information['server_type_id'],
             attr_id,
             "NULL",
-            hw_id,hostname
+            hw_id,
         )
-        debug.print_message("Inserting HW attribute: obj_id=%d srv_type_id=%d attr_id=%d hw_id=%d hostname=%s" % (
-            object_id,
-            server_object.information['server_type_id'],
-            attr_id,
-            "NULL",
-            hw_id,hostname
-        ))
     else:
-        debug.print_message("HW id not found in racktables")
+        debug.print_message("Unable to find HW type")
+        
+        
+        
 #TODO
     # Insert CPU and Memory Information
     debug.print_message("Inserting CPU attribute information")
-    if cpu_model_name != "":
-        rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPU Model"),cpu_model_name,"NULL",hostname)
-    if cpu_logical_num != "":
-        rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPUs Logical"),"NULL",cpu_logical_num,hostname)
-    if cpu_num != "":
-        rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPUs"),"NULL",cpu_num,hostname)
-    if cpu_cores != "":
-        rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("Cores per CPU"),"NULL",cpu_cores,hostname)
-    if cpu_mhz != "":
-        rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("CPU, MHz"),"NULL",cpu_mhz,hostname)
-    if memory_mb != "":
-        rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("RAM Mem, MB"),"NULL",memory_mb,hostname)
+    if server_object.information['cpu_model_name'] != "":
+        debug.print_message("CPU Model Name")
+        rtobject.InsertAttribute(
+            object_id,
+            server_object.information['server_type_id'],
+            rtobject.GetAttributeId("CPU Model"),
+            server_object.information['cpu_model_name'],
+            "NULL")
 
-    if hypervisor == "yes":
+    if server_object.information['cpu_logical_num'] != "":
+        debug.print_message("CPU logical num")
+        rtobject.InsertAttribute(
+            object_id,
+            server_object.information['server_type_id'],
+            rtobject.GetAttributeId("CPUs Logical"),
+            "NULL",
+            server_object.information['cpu_logical_num'])
+
+    if server_object.information['cpu_num'] != "":
+        debug.print_message("CPU num")
+        rtobject.InsertAttribute(
+            object_id,
+            server_object.information['server_type_id'],
+            rtobject.GetAttributeId("CPUs"),
+            "NULL",
+            server_object.information['cpu_num'])
+
+    if server_object.information['cpu_cores'] != "":
+        debug.print_message("CPU cores")
+        rtobject.InsertAttribute(
+            object_id,
+            server_object.information['server_type_id'],
+            rtobject.GetAttributeId("Cores per CPU"),
+            "NULL",
+            server_object.information['cpu_cores'])
+
+    if server_object.information['cpu_mhz'] != "":
+        debug.print_message("CPU MHz")
+        rtobject.InsertAttribute(
+            object_id,
+            server_object.information['server_type_id'],
+            rtobject.GetAttributeId("CPU, MHz"),
+            "NULL",
+            server_object.information['cpu_mhz'])
+
+    if server_object.information['memory_mb'] != "":
+        debug.print_message("Memory MB")
+        rtobject.InsertAttribute(
+            object_id,
+            server_object.information['server_type_id'],
+            rtobject.GetAttributeId("RAM Mem, MB"),
+            "NULL",
+            server_object.information['memory_mb'])
+
+    if server_object.information['hypervisor'] == "yes":
         searchstring = "Hypervisor"
         attid_hyp = rtobject.GetAttributeId(searchstring)
-        rtobject.InsertAttribute(object_id,server_type_id,attid_hyp,'NULL',1501,hostname)
         debug.print_message("Hypervisor, searching for: %s , Found: %s" %(searchstring, str(attid_hyp)))
-        if len(virtual_servers) != 0:
-            rtobject.CleanVirtuals(object_id,virtual_servers)
-            for virtual_name in virtual_servers:
+        rtobject.InsertAttribute(
+            object_id,
+            server_object.information['server_type_id'],
+            attid_hyp,
+            'NULL',
+            rtobject.GetDictionaryIdByValue('Yes', rtobject.GetDictionaryChapterId('Yes/No')))
+
+        if len(server_object.information['virtual_servers']) != 0:
+            rtobject.CleanVirtuals(
+                object_id,
+                server_object.information['virtual_servers'])
+            for virtual_name in server_object.information['virtual_servers']:
                 virtual_id = rtobject.GetObjectId(virtual_name)
                 if virtual_id != None:
                     debug.print_message("Virtual Linking id:%s with %s(%s)" %(str(object_id), str(virtual_id), str(virtual_name)))
                     rtobject.LinkVirtualHypervisor(object_id,virtual_id)
 
-    if len(drac_ip) != 0:
+    if len(server_object.information['network']['drac_ip']) != 0:
         debug.print_message("Inserting Drac IP")
         rtobject.UpdateNetworkInterface(object_id,'drac')
-        rtobject.InterfaceAddIpv4IP(object_id,'drac',drac_ip)
+        rtobject.InterfaceAddIpv4IP(object_id,'drac',server_object.information['network']['drac_ip'])
 
-for device in device_list:
+for device in server_object.information['network']['device_list']:
     #Add/update network interface
     port_id = rtobject.UpdateNetworkInterface(object_id,device)
     #Add network connections
-    if interface_connections[device_list.index(device)] != '':
-        rtobject.LinkNetworkInterface(object_id,device,interface_connections[device_list.index(device)][0],interface_connections[device_list.index(device)][1])
+    if server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)] != '':
+        rtobject.LinkNetworkInterface(
+            object_id,
+            device,
+            server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)][0],
+            server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)][1])
     #Add IPv4 ips
-    if interfaces_ips[device_list.index(device)] != '':
-        for ip in interfaces_ips[device_list.index(device)]:
+    if server_object.information['network']['interfaces_ips'][server_object.information['network']['device_list'].index(device)] != '':
+        for ip in server_object.information['network']['interfaces_ips'][server_object.information['network']['device_list'].index(device)]:
             rtobject.InterfaceAddIpv4IP(object_id,device,ip)
     #Add IPv6 ips
-    if interfaces_ips6[device_list.index(device)] != '':
-        for ip in interfaces_ips6[device_list.index(device)]:
+    if server_object.information['network']['interfaces_ips6'][server_object.information['network']['device_list'].index(device)] != '':
+        for ip in server_object.information['network']['interfaces_ips6'][server_object.information['network']['device_list'].index(device)]:
             rtobject.InterfaceAddIpv6IP(object_id,device,ip)
-
-# Set Installation Date
-debug.print_message("Inserting installation date: "+str(time.time()))
-rtobject.InsertAttribute(object_id,server_type_id,rtobject.GetAttributeId("Installation Date"),"NULL",int(time.time()),hostname)
-rtobject.InsertLog(object_id, "Server-Audit insert instalation date")
 
 # Update motd from comment And Tags
 comment = rtobject.GetObjectComment(object_id)
@@ -378,6 +469,9 @@ for key in tag_array.keys():
 if comment == None:
     comment = ""
 # copy template to motd, if no exist make tamplate from motd
+if not os.path.isfile(motd_file):
+    open(motd_file, 'a').close()
+
 try:
     shutil.copy2(motd_file_original, motd_file)
 except IOError :
