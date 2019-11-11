@@ -27,7 +27,6 @@ import os
 from configparser import ConfigParser
 import MySQLdb
 import platform
-import commands
 import ipaddr
 import rtapi
 

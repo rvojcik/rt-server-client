@@ -4,7 +4,7 @@ from __future__ import print_function
 import sys
 import argparse
 import pprint
-import commands
+import subprocess as sp
 import re
 
 # Add to path to include paths
@@ -91,30 +91,30 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    dmidecode = commands.getstatusoutput('dmidecode -q')
+    dmidecode = sp.run('dmidecode -q', shell=True, stdout=sp.PIPE, universal_newlines=True)
 
-    if dmidecode[0] == 0:
+    if dmidecode.returncode == 0:
 
         # VENDOR
-        if re.findall('Manufacturer:.*', dmidecode[1]):
-            output['vendor'] = re.findall('Manufacturer:.*', dmidecode[1])[0].split()[1]
+        if re.findall('Manufacturer:.*', dmidecode.stdout):
+            output['vendor'] = re.findall('Manufacturer:.*', dmidecode.stdout.rstrip())[0].split()[1]
         else:
             output['vendor'] = 'unknown'
 
         # PRODUCT NAME
-        if re.findall('Product Name:.*', dmidecode[1]):
-            output['product_name'] = ' '.join(re.findall('Product Name:.*', dmidecode[1])[0].split()[2:])
+        if re.findall('Product Name:.*', dmidecode.stdout):
+            output['product_name'] = ' '.join(re.findall('Product Name:.*', dmidecode.stdout.rstrip())[0].split()[2:])
         else:
             output['product_name'] = 'unknown'
 
         # UUID
-        if re.findall('UUID:.*', dmidecode[1]):
-            output['UUID'] = re.findall('UUID:.*', dmidecode[1])[0].split()[1]
+        if re.findall('UUID:.*', dmidecode.stdout):
+            output['UUID'] = re.findall('UUID:.*', dmidecode.stdout.rstrip())[0].split()[1]
         else:
             output['UUID'] = 'unknown'
 
         # SERIAL NUMBER
-        output['servicetag'] = getServiceTag(output, dmidecode[1])
+        output['servicetag'] = getServiceTag(output, dmidecode.stdout.rstrip())
 
 
         if args.action_vendor:
