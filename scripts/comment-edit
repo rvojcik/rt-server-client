@@ -24,7 +24,7 @@
 
 import sys
 import os
-from ConfigParser import ConfigParser
+from configparser import ConfigParser
 import MySQLdb
 import platform
 import commands

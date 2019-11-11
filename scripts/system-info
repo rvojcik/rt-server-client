@@ -42,7 +42,7 @@ import sys
 import os
 import commands
 import platform
-from ConfigParser import ConfigParser
+from configparser import ConfigParser
 import time
 import datetime
 import re
