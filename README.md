@@ -7,6 +7,7 @@ According to new version 0.3.0 there are few breaking changes.
 Be aware when upgrading.
 
 **CHANGELOG 0.3.0:**
+* Removed Python 2.7 support
 * Big redesign in SW installation. Use setup.py or pip to install
 * `--init` option for initializing custom Attributes in racktables
 * split code into few different classes  
@@ -46,7 +47,7 @@ Requirements
 Required
 
 * racktables-api (install with pip >=0.2.7)
-* Python > 2.7.x (tested with 2.5.2, 2.7.3)
+* Python >= 3.5.x 
 * lsb-release package(detection of Linux distribution and release)
 
 Optional
