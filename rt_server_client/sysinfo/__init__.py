@@ -5,7 +5,7 @@ import socket
 import struct
 import sys
 import os
-import commands
+import subprocess as sp
 import platform
 import time
 import datetime
@@ -47,12 +47,13 @@ class SysInfo():
             print('Unsupported virtualization')
             sys.exit(1)
 
-        output = commands.getoutput(command)
+        output = sp.run(command, shell=True, universal_newlines=True, stdout=sp.PIPE).stdout
         virtuals = []
 
         for line in output.splitlines()[2:]:
-            virtual = line.split()[index]
-            virtuals.append(virtual)
+            if line != '':
+                virtual = line.split()[index]
+                virtuals.append(virtual)
 
         self.debug.print_message("Virtual servers: "+str(virtuals))
 
@@ -79,33 +80,35 @@ class SysInfo():
         for interface in device_list:
             self.debug.print_message("Processing interface " + interface)
             # Default values
-            self.infromation['network']['lldp']['switch_name'] = ''
-            self.infromation['network']['lldp']['switch_port'] = ''
+            self.information['network']['lldp']['switch_name'] = ''
+            self.information['network']['lldp']['switch_port'] = ''
             # Get ip addresses
-            self.infromation['network']['interfaces_ips'].append(net.get_ip4_addr(interface))
+            self.information['network']['interfaces_ips'].append(net.get_ip4_addr(interface))
             self.debug.print_message("IPv4: "+str(self.information['network']['interfaces_ips']))
 
             self.information['network']['interfaces_ips6'].append(net.get_ip6_addr(interface))
             self.debug.print_message("IPv6: "+str(self.information['network']['interfaces_ips6']))
 
             # Get lldp
-            lldp_output = commands.getoutput('lldpctl -f keyvalue ' + interface)
+            lldp_output = sp.run('lldpctl -f keyvalue ' + interface, shell=True, universal_newlines=True, stdout=sp.PIPE).stdout
 
             #Test if it's juniper or Force10, otherwise skip this discovery becouse unsupported device
             # For JUniper
+            switch_name = ''
+            switch_port = ''
             if lldp_output.find('Juniper') > -1:
                 for line in lldp_output.split('\n'):
                     if line.find('lldp.'+interface+'.chassis.name') > -1:
-                        self.information['network']['lldp']['switch_name'] = line.split('=')[1]
+                        switch_name = line.split('=')[1]
                     elif line.find('lldp.'+interface+'.port.descr') > -1:
-                        self.information['network']['lldp']['switch_port'] = line.split('=')[1]
+                        switch_port = line.split('=')[1]
             # Others cisco like
             else:
                 for line in lldp_output.split('\n'):
                     if line.find('lldp.'+interface+'.chassis.name') > -1:
-                        self.information['network']['lldp']['switch_name'] = line.split('=')[1]
+                        switch_name = line.split('=')[1]
                     elif line.find('lldp.'+interface+'.port.ifname') > -1:
-                        self.information['network']['lldp']['switch_port'] = line.split('=')[1]
+                        switch_port = line.split('=')[1]
 
             #add connection to list
             connection = [switch_name, switch_port]
@@ -116,9 +119,9 @@ class SysInfo():
         management_ip_commands = ['omreport chassis remoteaccess config=nic' , 'ipmitool lan print']
         self.information['network']['drac_ip'] = ''
         for mgmcommand in management_ip_commands:
-            output = commands.getstatusoutput(mgmcommand)
+            output = sp.run(mgmcommand, shell=True, universal_newlines=True, stdout=sp.PIPE)
             try:
-                self.information['network']['drac_ip'] = re.findall('[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}',output[1])[0]
+                self.information['network']['drac_ip'] = re.findall('[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}\.[0-9]{0,3}',output.stdout)[0]
                 break
             except:
                 pass
@@ -128,13 +131,13 @@ class SysInfo():
         """ Get all system information """
         # Get service tag
         # Server type, model
-        self.information['product_name'] = commands.getoutput('get-bios-ident -s -m')
+        self.information['product_name'] = sp.run('get-bios-ident -s -m', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.rstrip()
         self.debug.print_message("Product name: "+self.information['product_name'])
 
-        self.information['service_tag'] = commands.getoutput('get-bios-ident -s -t')
+        self.information['service_tag'] = sp.run('get-bios-ident -s -t', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.rstrip()
         self.debug.print_message("Service Tag: "+self.information['service_tag'])
 
-        self.information['vendor'] = commands.getoutput('get-bios-ident -s -v')
+        self.information['vendor'] = sp.run('get-bios-ident -s -v', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.rstrip()
         self.debug.print_message("Vendor: "+ self.information['vendor'])
 
         # Check for virtualization
@@ -181,7 +184,7 @@ class SysInfo():
             self.information['service_tag'] = "VPS-"+ self.information['hostname']
             self.debug.print_message("VPS Service Tag override: "+ self.information['service_tag'])
         else:
-            self.information['service_tag'] = commands.getoutput('get-bios-ident -s -t')
+            self.information['service_tag'] = sp.run('get-bios-ident -s -t', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.rstrip()
 
         self.debug.print_message("Hostname: "+ self.information['hostname'])
 
@@ -200,9 +203,9 @@ class SysInfo():
         self.debug.print_message("CPU model name: "+ self.information['cpu_model_name'])
 
         # Physical CPU information
-        lscpu_output = commands.getstatusoutput('lscpu')
-        if lscpu_output[0] == 0:
-            lscpu = lscpu_output[1]
+        lscpu_output = sp.run('lscpu', shell=True, universal_newlines=True, stdout=sp.PIPE)
+        if lscpu_output.returncode == 0:
+            lscpu = lscpu_output.stdout
             try:
                 self.information['cpu_num'] = int(re.findall('CPU socket.*',lscpu)[0].split(':')[1].strip())
             except:
@@ -228,17 +231,17 @@ class SysInfo():
 
         # Stupid debian, empty os_codename
         if self.information['os_codename'] == '':
-            for line in commands.getoutput('lsb_release -a').split('\n'):
+            for line in sp.run('lsb_release -a', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n'):
                 if line.find('Codename:') > -1:
                     self.information['os_codename'] = line.split()[1]
         self.debug.print_message("os_dist, os_version, os_codename: " + str([self.information['os_distribution'], self.information['os_version'], self.information['os_codename']]))
 
         # Get label from Drac (display)
-        output = commands.getstatusoutput('omreport chassis frontpanel')
+        output = sp.run('omreport chassis frontpanel', shell=True, universal_newlines=True, stdout=sp.PIPE)
 
-        if output[0] == 0:
+        if output.returncode == 0:
             try:
-                line = re.findall('LCD Line 1.*',output[1])[0]
+                line = re.findall('LCD Line 1.*',output.stdout)[0]
                 label = line.split(' ')[4]
                 update_label = "yes"
             except:
@@ -251,7 +254,7 @@ class SysInfo():
 
         # If hostname and label not match, try to configure LCD
         if self.information['hostname'] != label:
-            if commands.getstatusoutput('omconfig chassis frontpanel config=custom lcdindex=1 text="' + self.information['hostname'] + '"')[0] == 0:
+            if sp.run('omconfig chassis frontpanel config=custom lcdindex=1 text="' + self.information['hostname'] + '"', shell=True, universal_newlines=True, stdout=sp.PIPE).returncode == 0:
                 label = self.information['hostname']
                 update_label = "yes"
         self.debug.print_message("label, update_label: %s %s" % (label, update_label))

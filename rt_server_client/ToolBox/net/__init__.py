@@ -21,7 +21,7 @@
 import socket
 import fcntl
 import struct
-import commands
+import subprocess as sp
 import re
 
 def get_ip4_addr(ifname=None):
@@ -30,14 +30,14 @@ def get_ip4_addr(ifname=None):
     # If no interface specified, try all
     if ifname == None:
         for interface in get_interfaces():
-            lines = commands.getoutput('ip addr show dev '+ interface +' | grep "inet "').split('\n')
+            lines = sp.run('ip addr show dev '+ interface +' | grep "inet "', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
             for line in lines:
                 if line != '':
                     address = line.strip().split(' ')[1].split('/')[0]
                     addresses.append(address)
 
     else:
-        lines = commands.getoutput('ip addr show dev '+ ifname +' | grep "inet "').split('\n')
+        lines = sp.run('ip addr show dev '+ ifname +' | grep "inet "', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
         for line in lines:
             if line != '':
                 address = line.strip().split(' ')[1].split('/')[0]
@@ -51,14 +51,14 @@ def get_ip6_addr(ifname=None):
     # If no interface specified, try all
     if ifname == None:
         for interface in get_interfaces():
-            lines = commands.getoutput('ip addr show dev '+ interface +' | grep "inet6 "').split('\n')
+            lines = sp.run('ip addr show dev '+ interface +' | grep "inet6 "', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
             for line in lines:
                 if line != '':
                     address = line.strip().split(' ')[1].split('/')[0]
                     if address.find('fe80') != 0:
                         addresses.append(address)
     else:
-        lines = commands.getoutput('ip addr show dev '+ ifname +' | grep "inet6 "').split('\n')
+        lines = sp.run('ip addr show dev '+ ifname +' | grep "inet6 "', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
         for line in lines:
             if line != '':
                 address = line.strip().split(' ')[1].split('/')[0]

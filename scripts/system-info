@@ -1,9 +1,9 @@
 #!/usr/bin/python
 #
 # This is server-audit script for Racktables project
-# It discover system, import or update infromation into racktables database
+# It discover system, import or update information into racktables database
 # 
-# Script support following infromation
+# Script support following information
 #   * hostname
 #    * service tag
 #    * supermicro exeption for service tag (same service tag and express servicetag for all machines)
