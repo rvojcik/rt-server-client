@@ -87,12 +87,9 @@ Just run
     system-info -d --init
 ```
 
-Add to root crontab following line for run script every 30 minutes
-```
-    */30 * * * * cd /usr/local/bin/system-info
-```
-
 Normaly script ends without any output. If something go wrong it returns some output of the error. 
+
+Then you can run the `system-info` manualy, from crontab or timer.
 
 License
 -------
