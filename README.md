@@ -1,6 +1,8 @@
 RT-server-client
 ================
 
+![pipeline](https://gitlab.com/rvojcik/rt-server-client/badges/master/pipeline.svg)
+
 UPDATE:
 -------
 According to new version 0.3.0 there are few breaking changes.
