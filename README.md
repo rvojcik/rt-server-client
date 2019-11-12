@@ -83,11 +83,14 @@ It requires number of custom attributes in racktables database. Initialization p
 check if these attributes are available and map them to correct object types.
 
 Just run
+```
     system-info -d --init
+```
 
 Add to root crontab following line for run script every 30 minutes
-
+```
     */30 * * * * cd /usr/local/bin/system-info
+```
 
 Normaly script ends without any output. If something go wrong it returns some output of the error. 
 
