@@ -72,6 +72,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("-f", dest="force_init", default=False, action="store_true", help="Force initialization, automaticly rewrite hostname")
 parser.add_argument("-d", dest="debug_mode", default=False, action="store_true", help="Debug mode")
 parser.add_argument("--init", dest="init_mode", default=False, action="store_true", help="Inicialization of objects in DB")
+parser.add_argument("--version", dest="version_print", default=False, action="store_true", help="Print version")
 
 args = parser.parse_args()
 ##
@@ -80,6 +81,11 @@ args = parser.parse_args()
 
 # Debug mode
 debug = base.Debug(args)
+
+if args.version_print:
+    import rt_server_client
+    print(rt_server_client.__version__)
+    sys.exit(0)
 
 try:
     debug.print_message("Opening config: "+config_path+main_config)

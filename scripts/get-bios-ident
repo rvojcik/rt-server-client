@@ -88,8 +88,14 @@ if __name__ == '__main__':
     parser.add_argument('-t', action="store_true", dest="action_st", default=False, help='Print service tag')
     parser.add_argument('-s', action="store_true", dest="action_simple", default=False, help='Batch print, simple output')
     parser.add_argument('-u', action="store_true", dest="action_uuid", default=False, help='Print system UUID')
+    parser.add_argument('--version', action="store_true", dest="print_version", default=False, help='Print version')
 
     args = parser.parse_args()
+
+    if args.print_version:
+        import rt_server_client
+        print(rt_server_client.__version__)
+        sys.exit(0)
 
     dmidecode = sp.run('dmidecode -q', shell=True, stdout=sp.PIPE, universal_newlines=True)
 
