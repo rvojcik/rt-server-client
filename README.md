@@ -1,6 +1,17 @@
 RT-server-client
 ================
 
+UPDATE:
+-------
+According to new version 0.3.0 there are few breaking changes.
+Be aware when upgrading.
+
+**CHANGELOG 0.3.0:**
+* Removed Python 2.7 support, **Python 3.x only is supported**
+* Big redesign in SW installation. Use setup.py or pip to install
+* `--init` option for initializing custom Attributes in racktables
+* split code into few different classes  
+
 Description
 -----------
 
@@ -9,119 +20,74 @@ It discover system, import or update infromation into racktables database
  
 Script support following infromation
 
-    * hostname
-    * transfer comment field to server motd (message of the day)
-    * commend-edit utility for editing comments on racktables directly from server
-    * service tag
-    * supermicro exeption for service tag (my supermicro servers has all same ST and Expres ST. I don't know why)
-    * for Dell servers: get warranty and support information from Dell website based on server ST.
-    * Physical and logical interfaces (eth,bond,bridges,venet and veth)
-    * IPv4 and IPv6 IP addresses, import and update in database
-    * Dell iDrac IP address (require Dell-OMSA Installed)
-    * OS Dristribution and Release information
-    * HW vendor and product type
-    * Hypervisor recognition (Xen 4.x)
-    * Hypervisor recognition (OpenVZ)
-    * Virtual server recognition (Xen 4.x)
-    * Virtual server recognition (OpenVZ)
-    * Link Virtual server with hypervisor as container in Racktables
-    * Racktables logging - when change ip addresses or virtual link with hypervisor
-    * Interface Connection (LLDPD needed for this feature. System automaticly link server interfaces with switch ports in RackTables)
+* hostname
+* transfer comment field to server motd (message of the day)
+* commend-edit utility for editing comments on racktables directly from server
+* service tag
+* supermicro exeption for service tag (my supermicro servers has all same ST and Expres ST. I don't know why)
+* for Dell servers: get warranty and support information from Dell website based on server ST.
+* Physical and logical interfaces (eth,bond,bridges,venet and veth)
+* IPv4 and IPv6 IP addresses, import and update in database
+* Dell iDrac IP address (require Dell-OMSA Installed)
+* OS Dristribution and Release information
+* HW vendor and product type
+* Hypervisor recognition (Xen 4.x)
+* Hypervisor recognition (OpenVZ)
+* Virtual server recognition (Xen 4.x)
+* Virtual server recognition (OpenVZ)
+* Link Virtual server with hypervisor as container in Racktables
+* Racktables logging - when change ip addresses or virtual link with hypervisor
+* Interface Connection (LLDPD needed for this feature. System automaticly link server interfaces with switch ports in RackTables)
 
 For some description, screenshots and examples visit https://www.cypherpunk.cz/automatic-server-audit-for-racktables-project/
-
-TODO
-----
-    * support for other virtualization technology (KVM, VirtualBox)
-    * support for windows servers
-    * support for FreeBSD
-
-
-Known Issues
-------------
-    * Create manually missing attributes for Server Issue #15
-      - "CPU Model"
-      - "CPUs Logical"
-      - "CPUs"
-      - "Cores per CPU"
-      - "CPU, MHz"
-      - "RAM Mem, MB"
-      - "Installation Date"
-      - "Kernel" 
 
 Requirements
 ------------
 
 Required
 
-    - rt-api project (used as submodule)
-    - Python > 2.5.x (tested with 2.5.2, 2.7.3)
-    - Python module Beautiful Soup (tested with bs3)
-    - lsb-release (detection of Linux distribution and release)
+* racktables-api (install with pip >=0.2.7)
+* Python >= 3.5.x 
+* lsb-release package(detection of Linux distribution and release)
 
 Optional
 
-    - smbios-utils (HW Vendor, Server model and Service-Tag)
-     - if you don't use smbios-utils, script generate random servicetag in /etc
-    - LLDPd (information about interface connection with switches and other devices)
-    - Dell OMSA (for information about iDRAC configuration)
+* smbios-utils (HW Vendor, Server model and Service-Tag)
+* if you don't use smbios-utils, script generate random servicetag in /etc
+* LLDPd (information about interface connection with switches and other devices)
+* Dell OMSA (for information about iDRAC configuration)
 
 Installation
 ------------
 
-You should install this application whare you want. I reccommend put it to /opt.
+Install it as normal python sw using pip or setup.py.
 
-    cd /opt/
-    git clone https://github.com/rvojcik/rt-server-client.git
-    cd rt-server-client/
-    git submodule update --init --recursive
-    vim rt-server-client/conf/main.conf
-    cd rt-server-client
-    ./system-info.py
+**PIP Install**
 
-If it ends without any message, it was successful. Look into RackTables web interface for new object.
+    pip install rt-server-client
+
+**Manual Install**
+
+    git clone https://github.com/rvojcik/rt-server-client
+    cd ./rt-server-client
+    sudo python ./setup.py install
+
+**Configuration**
+
+Configuration file have to be located in `/etc/rt-server-client/main.conf`
+
+When you have your configuration file you have to run **initialization** of the project.
+It requires number of custom attributes in racktables database. Initialization process
+check if these attributes are available and map them to correct object types.
+
+Just run
+    system-info -d --init
 
 Add to root crontab following line for run script every 30 minutes
 
-    */30 * * * * cd /opt/rt-server-client ; ./system-info.py
+    */30 * * * * cd /usr/local/bin/system-info
 
 Normaly script ends without any output. If something go wrong it returns some output of the error. 
-
-'''Dell Servers ans HW Support Type''':
-
-When using with dell servers, script try to find Attribute '''HW support type'''. This is not default racktables attribute.
-You must go in racktables to '''Configuration->Attributes->Add attribute'''. 
-
-Add 'HW support type' as string and then go to 'Attribute Map' and assign this new attribute to Server objects.
-
-Without this modification you probably get some error on Dell servers.
-
-Issues
-------
-
-Known problem is with Python Beautiful Soup module. 
-You should install it from source or from packages. 
-Name of module depends on version, inux distribution etc.
-
-If you see someting like this:
-
-    Traceback (most recent call last):
-      File "./system-info.py", line 60, in <module>
-        from ToolBox import net, dell
-      File "./lib/ToolBox/dell/__init__.py", line 22, in <module>
-        import bs3
-    ImportError: No module named bs3
-
-Edit please '''lib/ToolBox/dell/__init__.py''' and change "import bs3" to correct name of BeautifulSoup
-module (eg. bs4, BeautifulSoup ... )
-Beware, next parts of code use BeautifulSoup as bs3 so import correct modul with "as bs3"
-
-    import <your name of BeautifulSoup> as bs3 
-
-Example (for Debian Wheezy):
-
-    import BeautifulSoup as bs3
-
 
 License
 -------

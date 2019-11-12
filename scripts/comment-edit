@@ -24,29 +24,21 @@
 
 import sys
 import os
-from ConfigParser import ConfigParser
+from configparser import ConfigParser
 import MySQLdb
 import platform
-import commands
-
-# Get script path
-script_path = '/opt/server-audit'
-
-# Add local module path
-sys.path.append(script_path + '/lib/')
-
 import ipaddr
 import rtapi
 
 
 # Basic config
-config_path = script_path + "/conf/"
+config_path = "/etc/rt-server-client/"
 default_editor = "vim"
 tmp_file = '/tmp/comment-edit'
 
 try:
     config_file = open(config_path + "main.conf")
-except IOError ,e:
+except IOError as e:
     print("({})".format(e))
     sys.exit()
 
@@ -59,8 +51,8 @@ config.readfp(config_file)
 try:
     # Create connection to database
     db = MySQLdb.connect(host=config.get('mysqldb','host'),port=3306, passwd=config.get('mysqldb','password'),db=config.get('mysqldb','db'),user=config.get('mysqldb','user'))
-except MySQLdb.Error ,e:
-    print "Error %d: %s" % (e.args[0],e.args[1])
+except MySQLdb.Error as e:
+    print("Error %d: %s" % (e.args[0],e.args[1]))
     sys.exit(1)
 
 # Init Racktables object
@@ -74,7 +66,7 @@ comment = rtobject.GetObjectComment(rtobject.GetObjectId(platform.node()))
 
 if comment == None:
     comment = ""
-   
+
 comment_file.write(comment)
 comment_file.close()
 
@@ -93,13 +85,10 @@ if answer == "y":
     comment_file = open(tmp_file, 'r')
     comment = comment_file.read()
     rtobject.UpdateObjectComment(rtobject.GetObjectId(platform.node()), comment)
-    
+
 
     #Close file
     comment_file.close()
 
 db.close()
 
-
-
-   
