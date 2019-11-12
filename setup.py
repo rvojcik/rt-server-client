@@ -8,7 +8,7 @@ with open("requirements.txt", "r") as fh:
 
 setup(
     name="rt-server-client",
-    version="0.3.0",
+    version="3.0.0",
     packages=find_packages(),
     license="GPLv3",
     install_requires=install_reqs,
