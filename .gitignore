@@ -20,8 +20,12 @@ pip-log.txt
 .coverage
 .tox
 
-#Translations
+# Translations
 *.mo
 
-#Mr Developer
+# Mr Developer
 .mr.developer.cfg
+
+# Test Environment
+tests/docker/app/racktables
+tests/docker/db/data
