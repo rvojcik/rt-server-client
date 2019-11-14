@@ -102,10 +102,6 @@ config.readfp(config_file)
 # Close config
 config_file.close()
 
-# Sleep for some seconds. When running on 200 hosts in same second, local dns should have a problem with it
-if not args.debug_mode:
-    time.sleep(random.randint(1,12))
-
 ############################################################
 ##                                                        ##
 ##                 Main Database part                     ##
