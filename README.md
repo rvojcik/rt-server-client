@@ -76,7 +76,15 @@ Install it as normal python sw using pip or setup.py.
 
 **Configuration**
 
-Configuration file have to be located in `/etc/rt-server-client/main.conf`
+Configuration file have to be located in `/etc/rt-server-client/main.conf` with content something like this:
+```
+[mysqldb]
+user=racktables
+password=mysecretpass
+db=racktables_db
+host=192.168.1.1
+port=3306
+```
 
 When you have your configuration file you have to run **initialization** of the project.
 It requires number of custom attributes in racktables database. Initialization process
