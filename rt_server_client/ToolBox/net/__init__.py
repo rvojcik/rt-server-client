@@ -24,48 +24,65 @@ import struct
 import subprocess as sp
 import re
 
-def get_ip4_addr(ifname=None):
+def get_ip4_addr(ifname=None, prim_info=None):
+    """ Get IPv4 addresses from one or all interfaces. Return Array, with prim_info=True it returns Array[Touple] """
     addresses = []
 
     # If no interface specified, try all
     if ifname == None:
-        for interface in get_interfaces():
-            lines = sp.run('ip addr show dev '+ interface +' | grep "inet "', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
-            for line in lines:
-                if line != '':
-                    address = line.strip().split(' ')[1].split('/')[0]
-                    addresses.append(address)
-
+        interfaces = get_interfaces()
     else:
-        lines = sp.run('ip addr show dev '+ ifname +' | grep "inet "', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
+        interfaces = [ifname]
+
+    for interface in interfaces:
+        lines = sp.run('ip -4 -o addr show dev %s' % (interface), shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
         for line in lines:
             if line != '':
-                address = line.strip().split(' ')[1].split('/')[0]
-                addresses.append(address)
+                address = re.findall( r'[0-9]+(?:\.[0-9]+){3}/[0-9]+', line)[0].split('/')[0]
+                # Determine IP type, secondary or primary
+                if re.match('^.* secondary .*$', line):
+                    ip_type = 'secondary'
+                else:
+                    ip_type = 'primary'
+
+                # Add prim_info for bacwards compatibility
+                if (prim_info == True):
+                    addresses.append((address,ip_type))
+                else:
+                    addresses.append(address)
 
     return addresses
 
-def get_ip6_addr(ifname=None):
+def get_ip6_addr(ifname=None, prim_info=None):
+    """ Get IPv6 addresses from one or all interfaces. Return Array[Touple] """
     addresses = []
 
     # If no interface specified, try all
     if ifname == None:
-        for interface in get_interfaces():
-            lines = sp.run('ip addr show dev '+ interface +' | grep "inet6 "', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
-            for line in lines:
-                if line != '':
-                    address = line.strip().split(' ')[1].split('/')[0]
-                    if address.find('fe80') != 0:
-                        addresses.append(address)
+        interfaces = get_interfaces()
     else:
-        lines = sp.run('ip addr show dev '+ ifname +' | grep "inet6 "', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
+        interfaces = [ifname]
+
+    for interface in interfaces:
+        lines = sp.run('ip -6 -o addr show dev %s' % (interface), shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.split('\n')
         for line in lines:
             if line != '':
-                address = line.strip().split(' ')[1].split('/')[0]
+                address = re.findall( r'[a-fA-F0-9:]+/[0-9]+', line)[0].split('/')[0]
                 if address.find('fe80') != 0:
-                    addresses.append(address)
+                    # Determine IP type, secondary or primary
+                    if re.match('^.* secondary .*$', line):
+                        ip_type = 'secondary'
+                    else:
+                        ip_type = 'primary'
+
+                    # Add prim_info for bacwards compatibility
+                    if (prim_info == True):
+                        addresses.append((address,ip_type))
+                    else:
+                        addresses.append(address)
 
     return addresses
+
 def get_hw_addr(ifname):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     info = fcntl.ioctl(s.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
