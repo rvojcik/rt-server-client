@@ -351,8 +351,7 @@ if server_object.information['server_type_id'] == 4:
         )
     else:
         debug.print_message("Unable to find HW type")
-        
-        
+
     # Insert CPU and Memory Information
     debug.print_message("Inserting CPU attribute information")
     if server_object.information['cpu_model_name'] != "":
@@ -435,24 +434,33 @@ if server_object.information['server_type_id'] == 4:
         rtobject.UpdateNetworkInterface(object_id,'drac')
         rtobject.InterfaceAddIpv4IP(object_id,'drac',server_object.information['network']['drac_ip'])
 
-for device in server_object.information['network']['device_list']:
-    #Add/update network interface
-    port_id = rtobject.UpdateNetworkInterface(object_id,device)
-    #Add network connections
-    if server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)] != '':
-        rtobject.LinkNetworkInterface(
-            object_id,
-            device,
-            server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)][0],
-            server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)][1])
-    #Add IPv4 ips
-    if server_object.information['network']['interfaces_ips'][server_object.information['network']['device_list'].index(device)] != '':
-        for ip in server_object.information['network']['interfaces_ips'][server_object.information['network']['device_list'].index(device)]:
-            rtobject.InterfaceAddIpv4IP(object_id,device,ip)
-    #Add IPv6 ips
-    if server_object.information['network']['interfaces_ips6'][server_object.information['network']['device_list'].index(device)] != '':
-        for ip in server_object.information['network']['interfaces_ips6'][server_object.information['network']['device_list'].index(device)]:
-            rtobject.InterfaceAddIpv6IP(object_id,device,ip)
+if not args.backup_init:
+    for device in server_object.information['network']['device_list']:
+        #Add/update network interface
+        port_id = rtobject.UpdateNetworkInterface(object_id,device)
+        #Add network connections
+        if server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)] != '':
+            rtobject.LinkNetworkInterface(
+                object_id,
+                device,
+                server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)][0],
+                server_object.information['network']['interface_connections'][server_object.information['network']['device_list'].index(device)][1])
+        #Add IPv4 ips
+        if server_object.information['network']['interfaces_ips'][server_object.information['network']['device_list'].index(device)] != '':
+            for touple in server_object.information['network']['interfaces_ips'][server_object.information['network']['device_list'].index(device)]:
+                ip = touple[0]
+                rtobject.InterfaceAddIpv4IP(object_id,device,ip)
+                if touple[1] == 'secondary':
+                    rtobject.SetIPComment('secondary', ip)
+                    debug.print_message("Marking IP %s as secondary" % (ip))
+        #Add IPv6 ips
+        if server_object.information['network']['interfaces_ips6'][server_object.information['network']['device_list'].index(device)] != '':
+            for touple in server_object.information['network']['interfaces_ips6'][server_object.information['network']['device_list'].index(device)]:
+                ip = touple[0]
+                rtobject.InterfaceAddIpv6IP(object_id,device,ip)
+                if touple[1] == 'secondary':
+                    rtobject.SetIP6Comment('secondary', ip)
+                    debug.print_message("Marking IP %s as secondary" % (ip))
 
 # Update motd from comment And Tags
 comment = rtobject.GetObjectComment(object_id)

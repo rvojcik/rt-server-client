@@ -14,6 +14,7 @@ import random
 import shutil
 import argparse
 import ipaddr
+import json
 from ..ToolBox import base, net
 
 class SysInfo():
@@ -65,6 +66,7 @@ class SysInfo():
         self.DiscoverNetworking()
         self.DiscoverBmc()
         self.DiscoverSystem()
+        self.DiscoverStorage()
 
     def DiscoverNetworking(self):
         # Get interface list into interfaces list and filter docker interfaces
@@ -86,10 +88,10 @@ class SysInfo():
             self.information['network']['lldp']['switch_name'] = ''
             self.information['network']['lldp']['switch_port'] = ''
             # Get ip addresses
-            self.information['network']['interfaces_ips'].append(net.get_ip4_addr(interface))
+            self.information['network']['interfaces_ips'].append(net.get_ip4_addr(interface, True))
             self.debug.print_message("IPv4: "+str(self.information['network']['interfaces_ips']))
 
-            self.information['network']['interfaces_ips6'].append(net.get_ip6_addr(interface))
+            self.information['network']['interfaces_ips6'].append(net.get_ip6_addr(interface, True))
             self.debug.print_message("IPv6: "+str(self.information['network']['interfaces_ips6']))
 
             # Get lldp
@@ -130,6 +132,48 @@ class SysInfo():
             except:
                 pass
         self.debug.print_message("Drac IP: "+ self.information['network']['drac_ip'])
+
+    def DiscoverStorage(self):
+        """ Get information about storage subsystem """
+
+        disks_output = False
+        controllers_output = False
+
+        cmd = 'lsblk -J -o NAME,TYPE,MODEL,SIZE'
+        output = sp.getstatusoutput(cmd)
+        self.debug.print_message("lsblk output: " + str(output))
+
+        if output[0] == 0:
+            try:
+                lsblk_decoded = json.loads(output[1])
+            except:
+                lsblk_decoded = False
+
+            self.debug.print_message("lsblk decoded: " + str(lsblk_decoded))
+            if lsblk_decoded:
+                for dev in lsblk_decoded['blockdevices']:
+                    if dev['type'] == 'disk':
+                        if not re.match('^(nullb|rbd)[0-9]+$', dev['name']):
+                            if not disks_output:
+                                disks_output = "%s: %s" % (str(dev['name']), str(dev['size']))
+                            else:
+                                disks_output += "; %s: %s" % (str(dev['name']), str(dev['size']))
+
+                        if dev['model']:
+                            if not re.match('.*(LVM PV|DVD-ROM).*', dev['model']):
+                                if not controllers_output:
+                                    controllers_output = ["%s" % (str(dev['model']))]
+                                else:
+                                    if dev['model'] not in controllers_output:
+                                        controllers_output.append("%s" % (dev['model']))
+                if controllers_output:
+                    controllers_output = '; '.join(controllers_output)
+                else:
+                    controllers_output = 'generic-controller'
+
+        self.debug.print_message("Detected disks: %s" % (str(disks_output)))
+        self.debug.print_message("Detected controllers: %s" % (str(controllers_output)))
+
 
     def DiscoverSystem(self):
         """ Get all system information """

@@ -61,6 +61,22 @@ def run(rtobject):
             'sticky': 'no',
             'dict_name': 'server models'
         },
+        'Storage Controllers': {
+            'object_types': ['Server', 'VM'],
+            'attribute_type': 'string',
+            'sticky': 'no',
+        },
+        'Disks': {
+            'object_types': ['Server', 'VM'],
+            'attribute_type': 'string',
+            'sticky': 'no',
+        },
+        'Zaloha': {
+            'object_types': ['Server'],
+            'attribute_type': 'dict',
+            'sticky': 'no',
+            'dict_name': 'Yes/No',
+        },
     }
 
     for attribute, values in attribute_map.items():
