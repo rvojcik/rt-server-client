@@ -69,8 +69,10 @@ parser = argparse.ArgumentParser(
     description= 'Server audit automation system for RackTables',
     epilog='Created by Robert Vojcik <robert@vojcik.net>')
 
+parser.add_argument("-i", dest="backup_init", default=False, action="store_true", help="Register server as backup to racktables. Hostname <backupprefix>-<service-tag>")
 parser.add_argument("-f", dest="force_init", default=False, action="store_true", help="Force initialization, automaticly rewrite hostname")
 parser.add_argument("-d", dest="debug_mode", default=False, action="store_true", help="Debug mode")
+parser.add_argument("--dry-run", dest="dry_run", default=False, action="store_true", help="Dry run, don't update anything to racktables database")
 parser.add_argument("--init", dest="init_mode", default=False, action="store_true", help="Inicialization of objects in DB")
 parser.add_argument("--version", dest="version_print", default=False, action="store_true", help="Print version")
 
@@ -122,21 +124,31 @@ except MySQLdb.Error as e:
 debug.print_message("Initializing RT Api object")
 rtobject = rtapi.RTObject(db)
 
+if not args.dry_run:
 # Initialization mode
-if args.init_mode:
-    debug.print_message("Running rt-server-client initialization")
-    ret = database_init.run(rtobject)
-    if not ret:
-        base.perr("Initialization process failed")
-        sys.exit(1)
-    else:
-        base.pok("Initialization process done")
-        sys.exit(0)
+    if args.init_mode:
+        debug.print_message("Running rt-server-client initialization")
+        ret = database_init.run(rtobject)
+        if not ret:
+            base.perr("Initialization process failed")
+            sys.exit(1)
+        else:
+            base.pok("Initialization process done")
+            sys.exit(0)
 
 # Prepare server_object and gather information about the system
-server_object = sysinfo.SysInfo(args)
-server_object.DiscoverAll()
+server_object = sysinfo.SysInfo(args, config)
+if args.backup_init:
+    server_object.DiscoverBmc()
+    server_object.DiscoverSystem()
+else:
+    server_object.DiscoverAll()
+
 debug.print_message("Discovered info from sysinfo class:" + str(server_object.information))
+
+# Here we end on dryrun
+if args.dry_run:
+    sys.exit(0)
 
 ##
 ## Here insertion into database starts
@@ -341,8 +353,6 @@ if server_object.information['server_type_id'] == 4:
         debug.print_message("Unable to find HW type")
         
         
-        
-#TODO
     # Insert CPU and Memory Information
     debug.print_message("Inserting CPU attribute information")
     if server_object.information['cpu_model_name'] != "":

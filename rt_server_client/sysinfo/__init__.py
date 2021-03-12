@@ -21,13 +21,15 @@ class SysInfo():
     SysInfo Class will gather and contain all the system information
     """
 
-    def __init__(self, args=False, init_run="no"):
+    def __init__(self, args=False, config=False):
         self.information = {
             'network': {
                 'lldp': {},
             },
         }
         self.debug = base.Debug(args)
+        self.backup_init = args.backup_init
+        self.config = config
 
     def getHwAddr(self, ifname):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -61,6 +63,7 @@ class SysInfo():
     
     def DiscoverAll(self):
         self.DiscoverNetworking()
+        self.DiscoverBmc()
         self.DiscoverSystem()
 
     def DiscoverNetworking(self):
@@ -115,6 +118,7 @@ class SysInfo():
             self.debug.print_message("Connection: "+str(connection))
             self.information['network']['interface_connections'].append(connection)
 
+    def DiscoverBmc(self):
         # Get Drac IP
         management_ip_commands = ['omreport chassis remoteaccess config=nic' , 'ipmitool lan print']
         self.information['network']['drac_ip'] = ''
@@ -155,10 +159,6 @@ class SysInfo():
                 self.information['server_type_id'] = 1504
                 self.information['hypervisor'] = "no"
                 self.debug.print_message("Server is virtual (QEMU)")
-                # Wait, exit normaly when supervisor on QEMU
-                if self.init_run == "yes":
-                    self.debug.print_message("It's QEMU virtual on Supervisor, exiting.")
-                    sys.exit(0)
             else:
                 # It's server
                 self.information['server_type_id'] = 4
@@ -186,6 +186,9 @@ class SysInfo():
         else:
             self.information['service_tag'] = sp.run('get-bios-ident -s -t', shell=True, universal_newlines=True, stdout=sp.PIPE).stdout.rstrip()
 
+        # If backup init (register to racktables as backup server)
+        if self.backup_init:
+            self.information['hostname'] = "%s-%s" % (self.config.get('global', 'init_prefix'), self.information['service_tag'])
         self.debug.print_message("Hostname: "+ self.information['hostname'])
 
         # CPU information
