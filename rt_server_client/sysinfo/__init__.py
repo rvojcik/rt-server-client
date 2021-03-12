@@ -40,12 +40,23 @@ class SysInfo():
     def GetVirtualServers(self, virt='xen'):
         """Create list of virtual servers"""
 
+        if self.config.has_option('global','vps_hostname_ignore'):
+            vps_ignore = self.config.get('global', 'vps_hostname_ignore')
+        else:
+            vps_ignore = False
+
         if virt == 'xen':
             command = 'xm list'
             index = 0
+            ignore = 2
         elif virt == 'qemu':
             command = 'virsh list --all'
             index = 1
+            ignore = 2
+        elif virt == 'proxmox':
+            command = 'qm list'
+            index = 1
+            ignore = 1
         else:
             print('Unsupported virtualization')
             sys.exit(1)
@@ -53,10 +64,16 @@ class SysInfo():
         output = sp.run(command, shell=True, universal_newlines=True, stdout=sp.PIPE).stdout
         virtuals = []
 
-        for line in output.splitlines()[2:]:
+        for line in output.splitlines()[ignore:]:
             if line != '':
                 virtual = line.split()[index]
-                virtuals.append(virtual)
+                if vps_ignore:
+                    if not re.match(vps_ignore, virtual):
+                        virtuals.append(virtual)
+                    else
+                        self.debug.print_message("Ignoring virtual: %s, ignore pattern: %s" % (str(virtual), vps_ignore))
+                else:
+                    virtuals.append(virtual)
 
         self.debug.print_message("Virtual servers: "+str(virtuals))
 
