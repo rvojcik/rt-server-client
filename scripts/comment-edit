@@ -27,9 +27,7 @@ import os
 from configparser import ConfigParser
 import MySQLdb
 import platform
-import ipaddr
 import rtapi
-
 
 # Basic config
 config_path = "/etc/rt-server-client/"
@@ -78,7 +76,7 @@ except KeyError:
 
 os.system(comment_editor + " " + tmp_file)
 
-answer = raw_input("Would you like to send comment to database ? [y/n] [n]: ")
+answer = input("Would you like to send comment to database ? [y/n] [n]: ")
 
 if answer == "y":
     #Read comment from file
