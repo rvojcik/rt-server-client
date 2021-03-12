@@ -150,7 +150,7 @@ class SysInfo():
                 self.information['virtual_servers'] = self.GetVirtualServers(virt='qemu')
                 self.debug.print_message("Server is hypervisor")
                 self.debug.print_message("Virtuals: "+str(self.information['virtual_servers']))
-            elif vendor == 'QEMU':
+            elif self.information['vendor'] == 'QEMU':
                 # Looks like server but, QEMU vendor
                 self.information['server_type_id'] = 1504
                 self.information['hypervisor'] = "no"
