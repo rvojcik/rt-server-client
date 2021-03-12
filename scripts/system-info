@@ -50,7 +50,7 @@ import shutil
 import argparse
 import ipaddr
 import MySQLdb
-from rt_server_client.ToolBox import net, base
+from rt_server_client.ToolBox import net, base, dell
 from rt_server_client import sysinfo
 from rt_server_client.ToolBox import init as database_init
 import rtapi
@@ -74,6 +74,7 @@ parser.add_argument("-f", dest="force_init", default=False, action="store_true",
 parser.add_argument("-d", dest="debug_mode", default=False, action="store_true", help="Debug mode")
 parser.add_argument("--dry-run", dest="dry_run", default=False, action="store_true", help="Dry run, don't update anything to racktables database")
 parser.add_argument("--init", dest="init_mode", default=False, action="store_true", help="Inicialization of objects in DB")
+parser.add_argument("--force-warranty", dest="force_warranty", default=False, action="store_true", help="Inicialization of objects in DB")
 parser.add_argument("--version", dest="version_print", default=False, action="store_true", help="Print version")
 
 args = parser.parse_args()
@@ -103,6 +104,11 @@ config.readfp(config_file)
 
 # Close config
 config_file.close()
+
+try:
+    check_warranty = config.get('global', 'check_warranty')
+except:
+    check_warranty = "no"
 
 ############################################################
 ##                                                        ##
@@ -461,6 +467,33 @@ if not args.backup_init:
                 if touple[1] == 'secondary':
                     rtobject.SetIP6Comment('secondary', ip)
                     debug.print_message("Marking IP %s as secondary" % (ip))
+
+# Get server warranty
+# Dell only for this time
+if check_warranty == 'yes':
+    debug.print_message("Warranty update is ENABLED")
+    if server_object.information['server_type_id'] == 4:
+        warranty_date = rtobject.GetAttributeValue(object_id, rtobject.GetAttributeIdByName('HW warranty expiration'))
+        if ((args.force_warranty or warranty_date == None) and server_object.information['vendor'] == 'Dell'):
+            support_object = dell.get_dell_warranty(config, server_object.information['service_tag'])
+            if support_object:
+                debug.print_message("Warranty support information found")
+                rtobject.InsertAttribute(
+                    server_object.information['object_id'],
+                    server_object.information['server_type_id'],
+                    rtobject.GetAttributeIdByName('HW warranty expiration'),
+                    "NULL",
+                    time.mktime(support_object['datetime'].timetuple()),
+                    server_object.information['hostname']
+                )
+                rtobject.InsertAttribute(
+                    server_object.information['object_id'],
+                    server_object.information['server_type_id'],
+                    rtobject.GetAttributeIdByName('HW support type'),
+                    support_object['description'],
+                    "NULL",
+                    server_object.information['hostname']
+                )
 
 # Update motd from comment And Tags
 comment = rtobject.GetObjectComment(object_id)
