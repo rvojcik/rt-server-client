@@ -70,7 +70,7 @@ class SysInfo():
                 if vps_ignore:
                     if not re.match(vps_ignore, virtual):
                         virtuals.append(virtual)
-                    else
+                    else:
                         self.debug.print_message("Ignoring virtual: %s, ignore pattern: %s" % (str(virtual), vps_ignore))
                 else:
                     virtuals.append(virtual)

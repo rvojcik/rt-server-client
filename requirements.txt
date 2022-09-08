@@ -1,2 +1,3 @@
 ipaddr
+requests
 racktables-api>=0.2.7
